@@ -28,16 +28,16 @@ repos:
   hooks:
   - id: ruff-check
     name: linting
-    entry: uv run ruff check
+    entry: uv run ruff check pazufa_scraper_be/ tests/
     pass_filenames: false
     language: system
-    types_or: [python, pyi, jupyter]
+    types_or: [python, pyi]
   - id: ruff-format
     name: formatting
-    entry: uv run ruff format
+    entry: uv run ruff format pazufa_scraper_be/ tests/
     pass_filenames: false
     language: system
-    types_or: [python, pyi, jupyter]
+    types_or: [python, pyi]
   - id: ty
     name: type check
     entry: uv run ty check pazufa_scraper_be/ tests/

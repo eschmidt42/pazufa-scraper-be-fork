@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
 from typing import ClassVar
@@ -11,6 +12,8 @@ from scrapy.http import Response, XmlResponse
 from pazufa_scraper_be.pardok import GesetzVorgang
 from pazufa_scraper_be.spiders.utils import convert_element_to_dict
 
+logger = logging.getLogger(__name__)
+
 
 class GesetzVorgangSpider(scrapy.Spider):
     """A Scrapy spider for scraping process ('Vorgang') documents from the Berlin Parliament."""
@@ -23,7 +26,7 @@ class GesetzVorgangSpider(scrapy.Spider):
         """Yield the initial request for the pardok XML feed."""
         yield Request(url=self.start_url_template.format(self.crawler.settings.getint("WAHLPERIODE")))
 
-    def parse(self, response: Response) -> Generator[dict | GesetzVorgang]:
+    def parse(self, response: Response) -> Generator[dict | GesetzVorgang]:  # ty: ignore[invalid-mutable-override]
         """Parse the XML feed response into GesetzVorgang items or error dicts."""
         if not isinstance(response, XmlResponse):
             msg = f"Expecting {XmlResponse} but got {type(response)}."
@@ -33,6 +36,7 @@ class GesetzVorgangSpider(scrapy.Spider):
         feed_file = cache_dir / f"{response.selector.xpath('/Export').attrib.get('aktualisiert')}.xml"
 
         if not feed_file.exists():
+            logger.debug("Writing feed file to %s", feed_file)
             cache_dir.mkdir(parents=True, exist_ok=True)
             feed_file.write_text(response.text)
 

@@ -106,13 +106,13 @@ class BaseGesetzDokument(BaseModel):
 class Protokoll(BaseGesetzDokument):
     """Base model for protocol documents (Plenarprotokoll, Ausschussprotokoll)."""
 
-    dat: GermanDate | None = Field(default=None, alias="DokDat")
+    dat: GermanDate | None = Field(default=None, alias="DokDat")  # ty: ignore[invalid-attribute-override]
 
 
 class PlPrDokument(Protokoll):
     """Plenarprotokoll (PlPr) document."""
 
-    art: Literal["PlPr"] = Field(alias="DokArt")
+    art: Literal["PlPr"] = Field(alias="DokArt")  # ty: ignore[invalid-attribute-override]
 
     sb: str | None = Field(default=None, alias="Sb")
     redner: CoercedStrList = Field(default_factory=list, alias="Redner")
@@ -121,7 +121,7 @@ class PlPrDokument(Protokoll):
 class APrDokument(Protokoll):
     """Ausschussprotokoll (APr) document."""
 
-    art: Literal["APr"] = Field(alias="DokArt")
+    art: Literal["APr"] = Field(alias="DokArt")  # ty: ignore[invalid-attribute-override]
 
     urheber: CoercedStrList = Field(default_factory=list, alias="Urheber")
 
@@ -137,18 +137,18 @@ class DeskTitelSbMixin:
 class GVBlDokument(BaseGesetzDokument, DeskTitelSbMixin):
     """Gesetz- und Verordnungsblatt (GVBl) document."""
 
-    art: Literal["GVBl"] = Field(alias="DokArt")
+    art: Literal["GVBl"] = Field(alias="DokArt")  # ty: ignore[invalid-attribute-override]
 
     vk_dat: GermanDate = Field(alias="VkDat")
     jg: str = Field(alias="Jg")
     h_nr: str = Field(alias="HNr")
-    nr: str | None = Field(default=None, alias="DokNr")
+    nr: str | None = Field(default=None, alias="DokNr")  # ty: ignore[invalid-attribute-override]
 
 
 class DrsDokument(BaseGesetzDokument, DeskTitelSbMixin):
     """Drucksache (Drs) document."""
 
-    art: Literal["Drs"] = Field(alias="DokArt")
+    art: Literal["Drs"] = Field(alias="DokArt")  # ty: ignore[invalid-attribute-override]
 
     urheber: CoercedStrList = Field(default_factory=list, alias="Urheber")
 
