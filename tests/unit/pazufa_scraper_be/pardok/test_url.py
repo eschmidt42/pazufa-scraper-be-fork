@@ -8,10 +8,13 @@ import pytest
 from pydantic import HttpUrl
 from scrapy import Request
 
-from pazufa_scraper_be.pardok.dokument import APrDokument, ProtokollTyp
+from pazufa_scraper_be.pardok.dokument import APrDokument, PlPrDokument, ProtokollTyp
 from pazufa_scraper_be.pardok.url import (
+    add_additional_urls,
+    add_missing_plprdokument_primary_url,
     build_ausschussprotokoll_variant_url,
     build_plenarprotokoll_url,
+    fix_url,
     resolve_document_urls,
     url_is_reachable,
 )
@@ -125,6 +128,109 @@ def test_build_ausschussprotokoll_variant_url_rejects_url_with_none_path() -> No
 
     with pytest.raises(ValueError, match="should contain the path to a file but lacks any path"):
         build_ausschussprotokoll_variant_url(mock_url, ProtokollTyp.Beschluss)
+
+
+# URL adjustments ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("lok_url", "expected"),
+    [
+        (
+            f"{_DOK_BASE}/19/AusschussPr/iso/h19-076-wp.pdf",
+            f"{_DOK_BASE}/19/AusschussPr/h/h19-076-wp.pdf",
+        ),
+        (
+            f"{_DOK_BASE}/19/AusschussPr/h/h19-076-wp.pdf",
+            f"{_DOK_BASE}/19/AusschussPr/h/h19-076-wp.pdf",
+        ),
+        (None, None),
+    ],
+)
+def test_fix_url(apr_data: dict[str, Any], lok_url: str | None, expected: str | None) -> None:
+    """fix_url corrects the known bad path and otherwise preserves the URL."""
+    data = apr_data.copy()
+    data["LokURL"] = lok_url
+    dokument = APrDokument.model_validate(data)
+
+    result = fix_url(dokument)
+
+    assert (str(result) if result is not None else None) == expected
+
+
+def test_add_missing_plprdokument_primary_url_builds_url(plpr_data: dict[str, Any]) -> None:
+    """A PlPr document without a primary URL gets one constructed from its document number."""
+    data = plpr_data.copy()
+    data["LokURL"] = None
+    data["DokNr"] = "19/2"
+    dokument = PlPrDokument.model_validate(data)
+
+    result = add_missing_plprdokument_primary_url(dokument, 19)
+
+    assert str(result) == f"{_DOK_BASE}/19/PlenarPr/p19-002-wp.pdf"
+
+
+def test_add_missing_plprdokument_primary_url_returns_none_for_invalid_number(plpr_data: dict[str, Any]) -> None:
+    """A PlPr document with an unparseable document number remains without a primary URL."""
+    data = plpr_data.copy()
+    data["LokURL"] = None
+    data["DokNr"] = "19/x"
+    dokument = PlPrDokument.model_validate(data)
+
+    assert add_missing_plprdokument_primary_url(dokument, 19) is None
+
+
+@pytest.mark.parametrize("document_type", ["PlPr", "APr"])
+def test_add_missing_plprdokument_primary_url_preserves_existing_url(
+    document_type: str,
+    plpr_data: dict[str, Any],
+    apr_data: dict[str, Any],
+) -> None:
+    """Existing URLs are preserved for PlPr and non-PlPr documents."""
+    data = (plpr_data if document_type == "PlPr" else apr_data).copy()
+    dokument = (PlPrDokument if document_type == "PlPr" else APrDokument).model_validate(data)
+    original_url = dokument.lok_url
+
+    result = add_missing_plprdokument_primary_url(dokument, 19)
+
+    assert result == original_url
+
+
+def test_add_additional_urls_orders_apr_variants(apr_data: dict[str, Any]) -> None:
+    """APr variants are returned with Beschluss as primary and Inhalt/Wort as additionals."""
+    dokument = _make_apr(apr_data, f"{_DOK_BASE}/19/AusschussPr/as/as19-020-wp.pdf")
+
+    primary, additional = add_additional_urls(dokument)
+
+    assert str(primary) == f"{_DOK_BASE}/19/AusschussPr/as/as19-020-bp.pdf"
+    assert [str(url) for url in additional or []] == [
+        f"{_DOK_BASE}/19/AusschussPr/as/as19-020-ip.pdf",
+        f"{_DOK_BASE}/19/AusschussPr/as/as19-020-wp.pdf",
+    ]
+
+
+def test_add_additional_urls_preserves_missing_apr_primary_and_additionals(apr_data: dict[str, Any]) -> None:
+    """An APr without a primary URL keeps its existing additionals unchanged."""
+    data = apr_data.copy()
+    data["LokURL"] = None
+    data["additional_urls"] = [f"{_DOK_BASE}/19/AusschussPr/as/as19-020-ip.pdf"]
+    dokument = APrDokument.model_validate(data)
+
+    primary, additional = add_additional_urls(dokument)
+
+    assert primary is None
+    assert [str(url) for url in additional or []] == data["additional_urls"]
+
+
+def test_add_additional_urls_preserves_non_apr_urls(plpr_data: dict[str, Any]) -> None:
+    """Non-APr document URLs are returned without deriving protocol variants."""
+    plpr_data["additional_urls"] = [f"{_DOK_BASE}/19/PlenarPr/p19-003-wp.pdf"]
+    dokument = PlPrDokument.model_validate(plpr_data)
+
+    primary, additional = add_additional_urls(dokument)
+
+    assert str(primary) == plpr_data["LokURL"]
+    assert [str(url) for url in additional or []] == plpr_data["additional_urls"]
 
 
 # Protokoll order ---------------------------------------------------------------
