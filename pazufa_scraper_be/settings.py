@@ -20,7 +20,7 @@ from pazufa_scraper_be.pipelines import (
     DownloadAndCacheDocuments,
     ExtractTextFromPDF,
     FixAndAddUrls,
-    ReportAndDropErrors,
+    HandleErrors,
     SubmitVorgang,
     SummarizeExtractedPDFText,
 )
@@ -69,7 +69,7 @@ TELNETCONSOLE_ENABLED = False
 # Configure item pipelines
 ITEM_PIPELINES = {
     # NOTE: Pipelines with <100 get proper items or dicts, which contain data an error.
-    ReportAndDropErrors: 99,
+    HandleErrors: 99,
     # NOTE: Pipelines with >= 100 only get properly parsed items.
     FixAndAddUrls: 100,
     DownloadAndCacheDocuments: 110,

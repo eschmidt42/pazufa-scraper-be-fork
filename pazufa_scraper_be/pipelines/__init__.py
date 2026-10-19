@@ -5,7 +5,7 @@ from .documents import (
     FixAndAddUrls,
     SummarizeExtractedPDFText,
 )
-from .errors import ReportAndDropErrors
+from .handle_errors import HandleErrors
 from .submit import SubmitVorgang
 
 __all__ = [
@@ -13,7 +13,7 @@ __all__ = [
     "DownloadAndCacheDocuments",
     "ExtractTextFromPDF",
     "FixAndAddUrls",
-    "ReportAndDropErrors",
+    "HandleErrors",
     "SubmitVorgang",
     "SummarizeExtractedPDFText",
 ]
