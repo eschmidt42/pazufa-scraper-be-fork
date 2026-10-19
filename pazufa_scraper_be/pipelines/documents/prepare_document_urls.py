@@ -1,8 +1,8 @@
 import logging
 from typing import Self
 
-from pazufa_scraper_be.pardok import GesetzVorgang
-from pazufa_scraper_be.pardok.url import add_additional_urls, add_missing_plprdokument_primary_url, fix_url, resolve_document_urls
+from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang
+from pazufa_scraper_be.pardok.url import UrlResolution, add_additional_urls, add_missing_plprdokument_primary_url, fix_url, resolve_document_urls
 from pazufa_scraper_be.pipeline_guards import engine_guard, vorgang_guard
 from pazufa_scraper_be.pipelines._base import StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
@@ -25,15 +25,19 @@ class PrepareDocumentUrls(StatsPipeline):
 
             res = await resolve_document_urls(dokument, self.crawler.engine)
 
-            if res.missing_primary:
-                self.increment_stats(DokumentCounter.MISSING_PRIMARY)
-                msg = f"[{dokument.vorgang.id} - {dokument.id}]: Missing URL."
-                logger.warning(msg)
-
-            if res.recovered_from:
-                self.increment_stats(DokumentCounter.RECOVERED_FROM_ADDITIONAL)
-
-            if res.pruned:
-                self.increment_stats(DokumentCounter.ADDITIONAL_PRUNED)
+            self._count_url_resolution(dokument, res)
 
         return vorgang
+
+    def _count_url_resolution(self, dokument: AnyGesetzDokument, res: UrlResolution) -> None:
+        """Increment stats based on url resolutions."""
+        if res.missing_primary:
+            self.increment_stats(DokumentCounter.MISSING_PRIMARY)
+            msg = f"[{dokument.vorgang.id} - {dokument.id}]: Missing URL."
+            logger.warning(msg)
+
+        if res.recovered_from:
+            self.increment_stats(DokumentCounter.RECOVERED_FROM_ADDITIONAL)
+
+        if res.pruned:
+            self.increment_stats(DokumentCounter.ADDITIONAL_PRUNED)
