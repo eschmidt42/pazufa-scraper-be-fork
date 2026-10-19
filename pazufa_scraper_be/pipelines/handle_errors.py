@@ -7,7 +7,7 @@ from pazufa_scraper_be.pipelines._base import StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 
 
-class ReportAndDropErrors(StatsPipeline):
+class HandleErrors(StatsPipeline):
     """Pipeline that reports parse errors and drops malformed items."""
 
     def process_item(self: Self, item: dict | GesetzVorgang) -> GesetzVorgang:
