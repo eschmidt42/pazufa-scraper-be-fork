@@ -68,7 +68,17 @@ def test_prepare_document_urls_normalizes_and_prepares_document_urls(
     with patch(
         "pazufa_scraper_be.pipelines.documents.prepare_document_urls.resolve_document_urls",
         new_callable=AsyncMock,
-        return_value=UrlResolution(primary_was_reachable=True, recovered_from=None, pruned=[]),
+        side_effect=[
+            (None, UrlResolution(primary_was_reachable=True, recovered_from=None, pruned=[])),
+            (None, UrlResolution(primary_was_reachable=True, recovered_from=None, pruned=[])),
+            (
+                [
+                    HttpUrl("https://example.com/doc123-ip.pdf"),
+                    HttpUrl("https://example.com/doc123-wp.pdf"),
+                ],
+                UrlResolution(primary_was_reachable=True, recovered_from=None, pruned=[]),
+            ),
+        ],
     ):
         result = asyncio.run(prepare_document_urls_pipeline.process_item(item))
 
@@ -99,9 +109,15 @@ def test_prepare_document_urls_counts_resolver_results(
     ]
     item = GesetzVorgang.model_validate({**base_vorgang_data, "Dokument": documents})
     results = [
-        UrlResolution(primary_was_reachable=False, recovered_from=None, pruned=[]),
-        UrlResolution(primary_was_reachable=False, recovered_from=HttpUrl("https://example.com/recovered.pdf"), pruned=[]),
-        UrlResolution(primary_was_reachable=True, recovered_from=None, pruned=[HttpUrl("https://example.com/pruned.pdf")]),
+        (None, UrlResolution(primary_was_reachable=False, recovered_from=None, pruned=[])),
+        (
+            None,
+            UrlResolution(primary_was_reachable=False, recovered_from=HttpUrl("https://example.com/recovered.pdf"), pruned=[]),
+        ),
+        (
+            None,
+            UrlResolution(primary_was_reachable=True, recovered_from=None, pruned=[HttpUrl("https://example.com/pruned.pdf")]),
+        ),
     ]
 
     with (

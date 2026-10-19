@@ -170,19 +170,19 @@ def test_url_is_reachable_swallows_exceptions() -> None:
 
 
 def test_resolve_keeps_all_when_primary_and_additionals_reachable(apr_data: dict[str, Any]) -> None:
-    """No mutation when the primary and all additional URLs are reachable."""
+    """The primary stays unchanged and all reachable additional URLs are returned."""
     primary = "https://example.com/primary.pdf"
     additional = ["https://example.com/a.pdf", "https://example.com/b.pdf"]
     dokument = _make_apr(apr_data, primary, additional)
     engine = _FakeEngine(responses={primary: HTTPStatus.OK, additional[0]: HTTPStatus.OK, additional[1]: HTTPStatus.OK})
-    res = asyncio.run(resolve_document_urls(dokument, engine))  # ty: ignore[invalid-argument-type]
+    resolved_additional_urls, res = asyncio.run(resolve_document_urls(dokument, engine))  # ty: ignore[invalid-argument-type]
 
     assert res.primary_was_reachable is True
     assert res.recovered_from is None
     assert res.pruned == []
     assert res.missing_primary is False
     assert str(dokument.lok_url) == primary
-    assert [str(u) for u in (dokument.additional_urls or [])] == additional
+    assert [str(u) for u in (resolved_additional_urls or [])] == additional
 
 
 def test_resolve_prunes_unreachable_additionals(apr_data: dict[str, Any]) -> None:
@@ -191,13 +191,13 @@ def test_resolve_prunes_unreachable_additionals(apr_data: dict[str, Any]) -> Non
     additional = ["https://example.com/a.pdf", "https://example.com/b.pdf"]
     dokument = _make_apr(apr_data, primary, additional)
     engine = _FakeEngine(responses={primary: HTTPStatus.OK, additional[0]: HTTPStatus.NOT_FOUND, additional[1]: HTTPStatus.OK})
-    res = asyncio.run(resolve_document_urls(dokument, engine))  # ty: ignore[invalid-argument-type]
+    resolved_additional_urls, res = asyncio.run(resolve_document_urls(dokument, engine))  # ty: ignore[invalid-argument-type]
 
     assert res.primary_was_reachable is True
     assert res.recovered_from is None
     assert res.missing_primary is False
     assert [str(u) for u in res.pruned] == [additional[0]]
-    assert [str(u) for u in (dokument.additional_urls or [])] == [additional[1]]
+    assert [str(u) for u in (resolved_additional_urls or [])] == [additional[1]]
 
 
 def test_resolve_recovers_primary_from_first_reachable_additional(apr_data: dict[str, Any]) -> None:
@@ -206,14 +206,14 @@ def test_resolve_recovers_primary_from_first_reachable_additional(apr_data: dict
     additional = ["https://example.com/a.pdf", "https://example.com/b.pdf"]
     dokument = _make_apr(apr_data, primary, additional)
     engine = _FakeEngine(responses={primary: HTTPStatus.NOT_FOUND, additional[0]: HTTPStatus.OK, additional[1]: HTTPStatus.OK})
-    res = asyncio.run(resolve_document_urls(dokument, engine))  # ty: ignore[invalid-argument-type]
+    resolved_additional_urls, res = asyncio.run(resolve_document_urls(dokument, engine))  # ty: ignore[invalid-argument-type]
 
     assert res.primary_was_reachable is False
     assert str(res.recovered_from) == additional[0]
     assert res.missing_primary is False
     assert res.pruned == []
     assert str(dokument.lok_url) == additional[0]
-    assert [str(u) for u in (dokument.additional_urls or [])] == [additional[1]]
+    assert [str(u) for u in (resolved_additional_urls or [])] == [additional[1]]
 
 
 def test_resolve_marks_missing_primary_without_additionals(apr_data: dict[str, Any]) -> None:
@@ -221,13 +221,13 @@ def test_resolve_marks_missing_primary_without_additionals(apr_data: dict[str, A
     primary = "https://example.com/primary.pdf"
     dokument = _make_apr(apr_data, primary)
     engine = _FakeEngine(responses={primary: HTTPStatus.NOT_FOUND})
-    res = asyncio.run(resolve_document_urls(dokument, engine))  # ty: ignore[invalid-argument-type]
+    resolved_additional_urls, res = asyncio.run(resolve_document_urls(dokument, engine))  # ty: ignore[invalid-argument-type]
 
     assert res.primary_was_reachable is False
     assert res.recovered_from is None
     assert res.pruned == []
     assert res.missing_primary is True
-    assert dokument.additional_urls is None
+    assert resolved_additional_urls is None
 
 
 def test_resolve_marks_missing_primary_when_all_additionals_unreachable(apr_data: dict[str, Any]) -> None:
@@ -236,10 +236,10 @@ def test_resolve_marks_missing_primary_when_all_additionals_unreachable(apr_data
     additional = ["https://example.com/a.pdf", "https://example.com/b.pdf"]
     dokument = _make_apr(apr_data, primary, additional)
     engine = _FakeEngine(responses={primary: HTTPStatus.NOT_FOUND, additional[0]: HTTPStatus.INTERNAL_SERVER_ERROR, additional[1]: HTTPStatus.NOT_FOUND})
-    res = asyncio.run(resolve_document_urls(dokument, engine))  # ty: ignore[invalid-argument-type]
+    resolved_additional_urls, res = asyncio.run(resolve_document_urls(dokument, engine))  # ty: ignore[invalid-argument-type]
 
     assert res.primary_was_reachable is False
     assert res.recovered_from is None
     assert res.missing_primary is True
     assert [str(u) for u in res.pruned] == additional
-    assert dokument.additional_urls is None
+    assert resolved_additional_urls is None

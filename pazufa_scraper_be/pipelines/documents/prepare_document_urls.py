@@ -19,11 +19,10 @@ class PrepareDocumentUrls(StatsPipeline):
         engine_guard(self.crawler)
 
         for dokument in vorgang.dokumente:
-            fix_url(dokument)
-            add_missing_plprdokument_primary_url(dokument, self.wahlperiode)
-            add_additional_urls(dokument)
-
-            res = await resolve_document_urls(dokument, self.crawler.engine)
+            dokument.lok_url = fix_url(dokument)
+            dokument.lok_url = add_missing_plprdokument_primary_url(dokument, self.wahlperiode)
+            dokument.lok_url, dokument.additional_urls = add_additional_urls(dokument)
+            dokument.additional_urls, res = await resolve_document_urls(dokument, self.crawler.engine)
 
             self._count_url_resolution(dokument, res)
 
