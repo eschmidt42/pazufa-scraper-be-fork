@@ -16,32 +16,34 @@ CORRECTED_URL_PART = "/h/h19-076-"
 INCORRECT_URL_PART = "/iso/h19-076-"
 
 
+def _add_missing_primary_url(wahlperiode: int, dokument: AnyGesetzDokument) -> None:
+
+    # TODO(se-jaeger): Similarly could work for Ausschussprotokolle but those are trickier due to their URL containing abbreviation of Ausschussname
+    if isinstance(dokument, PlPrDokument) and dokument.lok_url is None:
+        dokument.lok_url = build_plenarprotokoll_url(wahlperiode, dokument.nr)
+
+
+def _add_additional_urls(dokument: AnyGesetzDokument) -> None:
+    # Ausschussprotokolle can have up to three documents: Beschlussprotokoll, Inhaltsprotokoll and Wortprotokoll.
+    # The last two are optional but the pardok XML does not always serve the first one.
+    # So we order here to our liking.
+    if not isinstance(dokument, APrDokument) or dokument.lok_url is None:
+        return
+
+    additional_urls = []
+    for typ in ProtokollTyp:
+        url = build_ausschussprotokoll_variant_url(dokument.lok_url, typ)
+        if typ is ProtokollTyp.Beschluss:
+            dokument.lok_url = url
+
+        else:
+            additional_urls.append(url)
+
+    dokument.additional_urls = additional_urls or None
+
+
 class PrepareDocumentUrls(StatsPipeline):
     """Pipeline that fixes and adds additional document URLs."""
-
-    def _add_missing_primary_url(self: Self, dokument: AnyGesetzDokument) -> None:
-
-        # TODO(se-jaeger): Similarly could work for Ausschussprotokolle but those are trickier due to their URL containing abbreviation of Ausschussname
-        if isinstance(dokument, PlPrDokument) and dokument.lok_url is None:
-            dokument.lok_url = build_plenarprotokoll_url(self.wahlperiode, dokument.nr)
-
-    def _add_additional_urls(self: Self, dokument: AnyGesetzDokument) -> None:
-        # Ausschussprotokolle can have up to three documents: Beschlussprotokoll, Inhaltsprotokoll and Wortprotokoll.
-        # The last two are optional but the pardok XML does not always serve the first one.
-        # So we order here to our liking.
-        if not isinstance(dokument, APrDokument) or dokument.lok_url is None:
-            return
-
-        additional_urls = []
-        for typ in ProtokollTyp:
-            url = build_ausschussprotokoll_variant_url(dokument.lok_url, typ)
-            if typ is ProtokollTyp.Beschluss:
-                dokument.lok_url = url
-
-            else:
-                additional_urls.append(url)
-
-        dokument.additional_urls = additional_urls or None
 
     async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:
         """Check for additional Ausschussprotokoll URLs and append them to each document."""
@@ -60,8 +62,8 @@ class PrepareDocumentUrls(StatsPipeline):
             if INCORRECT_URL_PART in str(dokument.lok_url):
                 dokument.lok_url = HttpUrl(str(dokument.lok_url).replace(INCORRECT_URL_PART, CORRECTED_URL_PART))
 
-            self._add_missing_primary_url(dokument)
-            self._add_additional_urls(dokument)
+            _add_missing_primary_url(self.wahlperiode, dokument)
+            _add_additional_urls(dokument)
 
             res = await resolve_document_urls(dokument, self.crawler.engine)
             if res.missing_primary:
