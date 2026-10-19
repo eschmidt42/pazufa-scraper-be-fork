@@ -2,6 +2,7 @@ import logging
 from typing import Self
 
 from pydantic import HttpUrl
+from scrapy.crawler import Crawler
 from scrapy.exceptions import DropItem
 
 from pazufa_scraper_be.pardok import AnyGesetzDokument, APrDokument, GesetzVorgang, PlPrDokument
@@ -42,18 +43,27 @@ def _add_additional_urls(dokument: AnyGesetzDokument) -> None:
     dokument.additional_urls = additional_urls or None
 
 
+def vorgang_guard(vorgang: GesetzVorgang) -> None:
+    """Guards against unexpected `vorgang` type passed at runtime."""
+    if not isinstance(vorgang, GesetzVorgang):
+        msg = f"Expected {GesetzVorgang.__name__} object but got {vorgang.__class__.__name__}."
+        raise DropItem(msg)
+
+
+def engine_guard(crawler: Crawler) -> None:
+    """Guards against missing crawler engine."""
+    if crawler.engine is None:
+        msg = "crawler.engine is None. The crawler seems improperly initialized."
+        raise ValueError(msg)
+
+
 class PrepareDocumentUrls(StatsPipeline):
     """Pipeline that fixes and adds additional document URLs."""
 
     async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:
         """Check for additional Ausschussprotokoll URLs and append them to each document."""
-        if not isinstance(vorgang, GesetzVorgang):
-            msg = f"Expected {GesetzVorgang.__name__} object but got {vorgang.__class__.__name__}."
-            raise DropItem(msg)
-
-        if self.crawler.engine is None:
-            msg = "crawler.engine is None. The crawler seems improperly initialized."
-            raise ValueError(msg)
+        vorgang_guard(vorgang)
+        engine_guard(self.crawler)
 
         for dokument in vorgang.dokumente:
             # NOTE: We need to fix this that early.
