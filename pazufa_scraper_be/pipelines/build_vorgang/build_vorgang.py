@@ -13,7 +13,7 @@ from scrapy.exceptions import DropItem
 
 from pazufa_scraper_be.constants import ANGENOMMEN, VERTAGT
 from pazufa_scraper_be.pardok import APrDokument, DokTyp, DrsDokument, GesetzVorgang, GVBlDokument, PlPrDokument
-from pazufa_scraper_be.pipelines._base import CacheDirPipeline, StatsPipeline
+from pazufa_scraper_be.pipelines._base import CachePipeline, StatsPipeline
 from pazufa_scraper_be.pipelines.build_vorgang import build_pazufa_dokument
 from pazufa_scraper_be.pipelines.build_vorgang.rules import (
     BackwardMergeRule,
@@ -116,7 +116,7 @@ def _get_ressort() -> Ressort | Unset | None:
     return UNSET
 
 
-class BuildPaZuFaVorgang(CacheDirPipeline, StatsPipeline):
+class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
     """Pipeline that converts a GesetzVorgang into a PaZuFa Vorgang API model."""
 
     # TODO(se-jaeger): refactor to reduce complexity
@@ -134,9 +134,10 @@ class BuildPaZuFaVorgang(CacheDirPipeline, StatsPipeline):
         dok_containers = []
         for pardok in vorgang.dokumente:
             pazufa = []
-            for url in pardok.all_urls:
-                dokument_cache_dir = self.get_dokument_cache_dir(dokument=pardok, url=url)
-                pazufa_dokument = build_pazufa_dokument(dokument=pardok, dokument_cache_dir=dokument_cache_dir, url=url)
+            for dokument_url in pardok.all_urls:
+                cache = self.get_cache(document=pardok, document_url=dokument_url)
+
+                pazufa_dokument = build_pazufa_dokument(dokument=pardok, cache=cache, url=dokument_url)
 
                 if pazufa_dokument:
                     pazufa.append(pazufa_dokument)

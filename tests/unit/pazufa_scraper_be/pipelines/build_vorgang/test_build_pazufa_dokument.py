@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from pazufa_corelib.api_client.models import Autor
@@ -11,12 +10,7 @@ from pazufa_corelib.api_client.models import Doktyp as PaZuFa_DokTyp
 from pazufa_corelib.api_client.types import UNSET
 from pydantic import HttpUrl
 
-from pazufa_scraper_be.constants import (
-    DOKUMENT_FILE_NAME,
-    LAST_MODIFIED_FILE_NAME,
-    SUMMARY_FILE_NAME,
-    TEXT_FILE_NAME,
-)
+from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.pardok import DokTyp
 from pazufa_scraper_be.pardok.dokument import (
     AnyGesetzDokument,
@@ -33,6 +27,7 @@ from pazufa_scraper_be.pipelines.build_vorgang.build_pazufa_dokument import (
     _check_summary_file,
     _check_text_file,
     _clean_urheber,
+    _compute_and_get_hashes,
     _get_autoren,
     _get_drucksnr,
     _get_titel,
@@ -40,8 +35,13 @@ from pazufa_scraper_be.pipelines.build_vorgang.build_pazufa_dokument import (
     _get_zeitpunkte,
     _get_zp_modifiziert,
     _get_zp_referenz,
+    _get_zusammenfassung,
     build_pazufa_dokument,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
 from tests.unit.pazufa_scraper_be.helpers import build_gesetz_vorgang_data
 
 
@@ -121,29 +121,21 @@ def test_get_typ_fallback(base_dok_data: dict[str, Any], base_vorgang_data: dict
     [
         ("drs_data", DrsDokument, "123/2024"),
         ("plpr_data", PlPrDokument, "123/2024"),
-        ("apr_data", APrDokument, "123/2024-42"),
+        ("apr_data", APrDokument, "123/2024-wp"),
         ("gvbl_data", GVBlDokument, "12345/2024"),
         ("base_dok_data", BaseGesetzDokument, ""),
     ],
 )
-def test_get_drucksnr(request: pytest.FixtureRequest, fixture_name: str, dokument_class: type[BaseGesetzDokument], expected_drucksnr: str) -> None:
+def test_get_drucksnr(
+    tmp_path: Path, request: pytest.FixtureRequest, fixture_name: str, dokument_class: type[BaseGesetzDokument], expected_drucksnr: str
+) -> None:
     """Verify Durchsachennummer assignment."""
     data = request.getfixturevalue(fixture_name)
     dokument = dokument_class.model_validate(data)
+    cache = Cache(base_dir=tmp_path, name=expected_drucksnr)
 
-    dokument_cache_dir = Path("something/fake/42")
-
-    drucksnr = _get_drucksnr(dokument, dokument_cache_dir)
+    drucksnr = _get_drucksnr(dokument, cache=cache)
     assert drucksnr == expected_drucksnr
-
-
-def test_get_drucksnr_cache_dir_is_none(apr_data: dict[str, Any]) -> None:
-    """Verify Durchsachennummer assignment for APR without cache dir."""
-    dokument = APrDokument.model_validate(apr_data)
-    dokument_cache_dir = None
-
-    drucksnr = _get_drucksnr(dokument, dokument_cache_dir)
-    assert drucksnr == "123/2024"
 
 
 @pytest.mark.parametrize(
@@ -154,6 +146,7 @@ def test_get_drucksnr_cache_dir_is_none(apr_data: dict[str, Any]) -> None:
     ],
 )
 def test_get_titel_returns_titel_string(
+    tmp_path: Path,
     request: pytest.FixtureRequest,
     dok_class: type[GVBlDokument | DrsDokument],
     fixture_name: str,
@@ -162,24 +155,26 @@ def test_get_titel_returns_titel_string(
     """Verify that a non-None titel field is returned directly for GVBl and Drs documents."""
     data = request.getfixturevalue(fixture_name)
     dokument = dok_class.model_validate(data)
+    cache = Cache(base_dir=tmp_path, name="document-folder")
 
-    assert _get_titel(dokument, Path("some/fake/dir")) == expected_titel
+    assert _get_titel(dokument, cache) == expected_titel
 
 
 @pytest.mark.parametrize(
-    ("cache_dir_suffix", "expected_titel"),
+    ("document_name_suffix", "expected_titel"),
     [
         (f"-{ProtokollTyp.Beschluss}", "Ausschuss Beschlussprotokoll - 123/2024"),
         (f"-{ProtokollTyp.Inhalt}", "Ausschuss Inhaltsprotokoll - 123/2024"),
         (f"-{ProtokollTyp.Wort}", "Ausschuss Wortprotokoll - 123/2024"),
     ],
 )
-def test_get_titel_apr(apr_data: dict[str, Any], cache_dir_suffix: str, expected_titel: str) -> None:
+def test_get_titel_apr(tmp_path: Path, apr_data: dict[str, Any], document_name_suffix: str, expected_titel: str) -> None:
     """Verify APrDokument title is derived from cache dir suffix."""
     dokument = APrDokument.model_validate(apr_data)
-    cache_dir = Path(f"some/fake/dok{cache_dir_suffix}")
+    dokument.lok_url = HttpUrl(f"https://example.com/doc123-{document_name_suffix}.pdf")
+    cache = Cache(base_dir=tmp_path, name=f"document-folder/doc123-{document_name_suffix}")
 
-    assert _get_titel(dokument, cache_dir) == expected_titel
+    assert _get_titel(dokument, cache) == expected_titel
 
 
 @pytest.mark.parametrize(
@@ -189,27 +184,96 @@ def test_get_titel_apr(apr_data: dict[str, Any], cache_dir_suffix: str, expected
         (DokTyp.AendAntr, "Änderungsantrag - 123/2024"),
     ],
 )
-def test_get_titel_drs_typ(drs_data: dict[str, Any], dok_typ: DokTyp, expected_titel: str) -> None:
+def test_get_titel_drs_typ(tmp_path: Path, drs_data: dict[str, Any], dok_typ: DokTyp, expected_titel: str) -> None:
     """Verify DrsDokument title is derived from DokTyp when titel is None."""
     data = {**drs_data, "Titel": None, "DokTyp": str(dok_typ)}
     dokument = DrsDokument.model_validate(data)
+    cache = Cache(base_dir=tmp_path, name="document-folder")
 
-    assert _get_titel(dokument, Path("some/fake/dir")) == expected_titel
+    assert _get_titel(dokument, cache) == expected_titel
 
 
-def test_get_titel_gvbl_fallback(gvbl_data: dict[str, Any]) -> None:
+def test_get_titel_gvbl_fallback(tmp_path: Path, gvbl_data: dict[str, Any]) -> None:
     """Verify GVBlDokument falls back to HNr/Jg when titel is None."""
     data = {**gvbl_data, "Titel": None}
     dokument = GVBlDokument.model_validate(data)
+    cache = Cache(base_dir=tmp_path, name="document-folder")
 
-    assert _get_titel(dokument, Path("some/fake/dir")) == "Gesetz- und Verordnungsblatt Nr. 12345/2024"
+    assert _get_titel(dokument, cache) == "Gesetz- und Verordnungsblatt Nr. 12345/2024"
 
 
-def test_get_titel_generic_fallback_with_nr(plpr_data: dict[str, Any]) -> None:
+def test_get_titel_generic_fallback_with_nr(tmp_path: Path, plpr_data: dict[str, Any]) -> None:
     """Verify generic fallback returns '{art_l} - {nr}' for documents without a specific title rule."""
     dokument = PlPrDokument.model_validate(plpr_data)
+    cache = Cache(base_dir=tmp_path, name="document-folder")
 
-    assert _get_titel(dokument, Path("some/fake/dir")) == "Plenumsprotokoll - 123/2024"
+    assert _get_titel(dokument, cache) == "Plenumsprotokoll - 123/2024"
+
+
+def test_compute_and_get_hashes(tmp_path: Path) -> None:
+    """Verify PDF and extracted-text hashes include their MIME types and strategies."""
+    cache = Cache(base_dir=tmp_path, name="document-folder")
+
+    cache[Key.DOCUMENT] = b"document"
+    cache[Key.TEXT] = "extracted text"
+
+    hashes = _compute_and_get_hashes(cache)
+
+    assert len(hashes) == 3
+    assert {document_hash.mime for document_hash in hashes} == {"application/pdf", "text/plain"}
+    assert all(document_hash.value for document_hash in hashes)
+
+
+def test_get_zusammenfassung(tmp_path: Path) -> None:
+    """Verify summary text is converted into a full-LLM summary tuple."""
+    cache = Cache(base_dir=tmp_path, name="document-folder")
+    cache[Key.SUMMARY] = "summary"
+
+    result = _get_zusammenfassung(cache)
+
+    assert isinstance(result, list)
+    assert [(item.inhalt, item.typ) for item in result] == [("summary", "full-llm")]
+
+
+def test_get_zusammenfassung_missing(tmp_path: Path) -> None:
+    """Verify UNSET is returned when no summary file exists."""
+    cache = Cache(base_dir=tmp_path, name="document-folder")
+
+    assert _get_zusammenfassung(cache) is UNSET
+
+
+def test_build_pazufa_dokument_missing_text_file(
+    tmp_path: Path, plpr_data: dict[str, Any], base_vorgang_data: dict[str, Any], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Verify building stops when the required extracted text file is missing."""
+    dokument = PlPrDokument.model_validate(plpr_data)
+    cache = Cache(base_dir=tmp_path, name="document-folder")
+    dokument.set_vorgang(GesetzVorgang.model_validate(base_vorgang_data))
+
+    caplog.set_level(logging.WARNING)
+    result = build_pazufa_dokument(dokument, cache, HttpUrl("https://example.com/doc123"))
+
+    assert result is None
+    assert "Text file does not exist" in caplog.text
+
+
+def test_build_pazufa_dokument_without_summary(
+    tmp_path: Path, plpr_data: dict[str, Any], base_vorgang_data: dict[str, Any], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Verify a document is built with an UNSET summary when the optional summary is missing."""
+    cache = Cache(base_dir=tmp_path, name="document-folder")
+    dokument = PlPrDokument.model_validate(plpr_data)
+    dokument.set_vorgang(GesetzVorgang.model_validate(base_vorgang_data))
+
+    cache[Key.DOCUMENT] = b"document"
+    cache[Key.TEXT] = "some text"
+
+    caplog.set_level(logging.INFO)
+    result = build_pazufa_dokument(dokument, cache, HttpUrl("https://example.com/doc123"))
+
+    assert result is not None
+    assert result.zusammenfassung is UNSET
+    assert "Summary file does not exist" in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -233,47 +297,44 @@ def test_clean_urheber(input_text: str, expected_text: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("last_modified_str", "expected_date"),
+    ("last_modified", "expected_date"),
     [
-        ("2024-05-10T12:34:56+00:00", datetime(2024, 5, 10, tzinfo=UTC)),
-        ("2024-12-31T23:59:59+00:00", datetime(2024, 12, 31, tzinfo=UTC)),
+        (datetime(2024, 5, 10, 12, 34, 56, tzinfo=UTC), datetime(2024, 5, 10, tzinfo=UTC)),
+        (datetime(2024, 12, 31, 23, 59, 59, tzinfo=UTC), datetime(2024, 12, 31, tzinfo=UTC)),
     ],
 )
-def test_get_zp_modifiziert_with_last_modified(tmp_path: Path, plpr_data: dict[str, Any], last_modified_str: str, expected_date: datetime) -> None:
+def test_get_zp_modifiziert_with_last_modified(tmp_path: Path, plpr_data: dict[str, Any], last_modified: datetime, expected_date: datetime) -> None:
     """Verify that if LAST_MODIFIED.txt is present, it's used and normalized to midnight UTC."""
-    cache_dir = tmp_path / "dokument-folder"
-    cache_dir.mkdir()
-    (cache_dir / LAST_MODIFIED_FILE_NAME).write_text(last_modified_str)
+    cache = Cache(base_dir=tmp_path, name="document-folder")
+    cache[Key.LAST_MODIFIED] = last_modified
 
     dokument = PlPrDokument.model_validate(plpr_data)
 
-    actual_date = _get_zp_modifiziert(dokument, cache_dir)
+    actual_date = _get_zp_modifiziert(dokument, cache)
     assert actual_date == expected_date
 
 
 def test_get_zp_modifiziert_with_dat_fallback(tmp_path: Path, plpr_data: dict[str, Any]) -> None:
     """Verify that if LAST_MODIFIED.txt is missing, the document's dat field is used."""
-    cache_dir = tmp_path / "dokument-folder"
-    cache_dir.mkdir()
+    cache = Cache(base_dir=tmp_path, name="document-folder")
 
     data = {**plpr_data, "DokDat": "15.06.2024"}
     dokument = PlPrDokument.model_validate(data)
     expected_date = datetime(2024, 6, 15, tzinfo=UTC)
 
-    actual_date = _get_zp_modifiziert(dokument, cache_dir)
+    actual_date = _get_zp_modifiziert(dokument, cache)
     assert actual_date == expected_date
 
 
 def test_get_zp_modifiziert_raises_value_error(tmp_path: Path, plpr_data: dict[str, Any]) -> None:
     """Verify that ValueError is raised if no data source is available."""
-    cache_dir = tmp_path / "dokument-folder"
-    cache_dir.mkdir()
+    cache = Cache(base_dir=tmp_path, name="document-folder")
 
     data = {**plpr_data, "DokDat": None}
     dokument = PlPrDokument.model_validate(data)
 
     with pytest.raises(ValueError, match=r"Could not resolve zp_modifiziert."):
-        _get_zp_modifiziert(dokument, cache_dir)
+        _get_zp_modifiziert(dokument, cache)
 
 
 def test_get_zp_referenz_with_dat(plpr_data: dict[str, Any]) -> None:
@@ -311,13 +372,12 @@ def test_get_zp_referenz_with_none_dat(base_vorgang_data: dict[str, Any], plpr_d
 
 def test_get_zeitpunkte(tmp_path: Path, plpr_data: dict[str, Any]) -> None:
     """Verify _get_zeitpunkte returns correct zp_erstellt, zp_referenz, and zp_modifiziert values."""
-    cache_dir = tmp_path / "dokument-folder"
-    cache_dir.mkdir()
+    cache = Cache(base_dir=tmp_path, name="document-folder")
 
     dokument = PlPrDokument.model_validate(plpr_data)
 
     expected_dt = datetime(2024, 5, 10, tzinfo=UTC)
-    assert _get_zeitpunkte(dokument, cache_dir) == (UNSET, expected_dt, expected_dt)
+    assert _get_zeitpunkte(dokument, cache) == (UNSET, expected_dt, expected_dt)
 
 
 @pytest.mark.parametrize(
@@ -373,13 +433,14 @@ def test_check_text_file(  # noqa: PLR0913, PLR0917
     tmp_path: Path,
     base_vorgang_data: dict[str, Any],
     plpr_data: dict[str, Any],
-    file_exists: bool,  # noqa: FBT001
-    expected_result: bool,  # noqa: FBT001
+    file_exists: bool,
+    expected_result: bool,
     log_level: logging._Level | None,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Verify that _check_text_file correctly identifies missing text files and logs warnings."""
     dokument = PlPrDokument.model_validate(plpr_data)
+    cache = Cache(base_dir=tmp_path, name="document-folder")
 
     gesetz_vorgang_data = build_gesetz_vorgang_data(
         base_vorgang_data=base_vorgang_data,
@@ -389,14 +450,13 @@ def test_check_text_file(  # noqa: PLR0913, PLR0917
     gesetz_vorgang = GesetzVorgang.model_validate(gesetz_vorgang_data)
     dokument.set_vorgang(gesetz_vorgang)
 
-    text_file = tmp_path / "TEXT.txt"
     if file_exists:
-        text_file.write_text("some text")
+        cache[Key.TEXT] = "some text"
 
     if log_level:
         caplog.set_level(log_level)
 
-    result = _check_text_file(dokument, text_file)
+    result = _check_text_file(dokument, cache)
     assert result == expected_result
 
     if not file_exists:
@@ -414,13 +474,15 @@ def test_check_summary_file(  # noqa: PLR0913, PLR0917
     tmp_path: Path,
     base_vorgang_data: dict[str, Any],
     plpr_data: dict[str, Any],
-    file_exists: bool,  # noqa: FBT001
-    expected_result: bool,  # noqa: FBT001
+    file_exists: bool,
+    expected_result: bool,
     log_level: logging._Level | None,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Verify that _check_summary_file correctly identifies missing summary files and logs info."""
     dokument = PlPrDokument.model_validate(plpr_data)
+    cache = Cache(base_dir=tmp_path, name="document-folder")
+
     gesetz_vorgang_data = build_gesetz_vorgang_data(
         base_vorgang_data=base_vorgang_data,
         dok_datas=[plpr_data],
@@ -429,43 +491,31 @@ def test_check_summary_file(  # noqa: PLR0913, PLR0917
     gesetz_vorgang = GesetzVorgang.model_validate(gesetz_vorgang_data)
     dokument.set_vorgang(gesetz_vorgang)
 
-    summary_file = tmp_path / "SUMMARY.txt"
     if file_exists:
-        summary_file.write_text("some summary")
+        cache[Key.SUMMARY] = "some summary"
 
     if log_level:
         caplog.set_level(log_level)
 
-    result = _check_summary_file(dokument, summary_file)
+    result = _check_summary_file(dokument, cache)
     assert result == expected_result
 
     if not file_exists:
         assert "Summary file does not exist" in caplog.text
 
 
-def test_build_pazufa_dokument_cache_dir_none(plpr_data: dict[str, Any]) -> None:
-    """Verify that build_pazufa_dokument returns None if cache_dir is None."""
-    dokument = PlPrDokument.model_validate(plpr_data)
-    url = HttpUrl("https://example.com/doc123")
-
-    result = build_pazufa_dokument(dokument, None, url)
-    assert result is None
-
-
 def test_build_pazufa_dokument_happy_path(tmp_path: Path, plpr_data: dict[str, Any], base_vorgang_data: dict[str, Any]) -> None:
     """Verify the happy path for building a PaZuFaDokument."""
-    cache_dir = tmp_path / "dokument-folder"
-    cache_dir.mkdir()
+    cache = Cache(base_dir=tmp_path, name="document-folder")
 
     document_content = b"This is the document content as bytes."
     text_content = "This is the extracted text content."
     summary_content = "This is a short summary."
-    last_modified_str = "2024-05-10T12:34:56+00:00"
 
-    (cache_dir / DOKUMENT_FILE_NAME).write_bytes(document_content)
-    (cache_dir / TEXT_FILE_NAME).write_text(text_content)
-    (cache_dir / SUMMARY_FILE_NAME).write_text(summary_content)
-    (cache_dir / LAST_MODIFIED_FILE_NAME).write_text(last_modified_str)
+    cache[Key.DOCUMENT] = document_content
+    cache[Key.TEXT] = text_content
+    cache[Key.SUMMARY] = summary_content
+    cache[Key.LAST_MODIFIED] = datetime(2024, 5, 10, 12, 34, 56, tzinfo=UTC)
 
     dokument = PlPrDokument.model_validate(plpr_data)
 
@@ -474,7 +524,7 @@ def test_build_pazufa_dokument_happy_path(tmp_path: Path, plpr_data: dict[str, A
 
     url = HttpUrl("https://example.com/doc123")
 
-    result = build_pazufa_dokument(dokument, cache_dir, url)
+    result = build_pazufa_dokument(dokument, cache, url)
 
     assert result is not None
     assert result.volltext == text_content

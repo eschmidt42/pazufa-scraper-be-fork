@@ -1,4 +1,4 @@
-import datetime
+import datetime as dt
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -139,7 +139,7 @@ def make_station() -> Callable[..., Station]:
 
     def _make(typ: Stationstyp, **overrides: dict[str, Any]) -> Station:
         defaults: dict[str, Any] = {
-            "zp_start": datetime.datetime.now(tz=datetime.UTC),
+            "zp_start": dt.datetime.now(tz=dt.UTC),
             "gremium": Gremium(parlament=Parlament.BE, wahlperiode=19, name="Plenum"),
             "typ": typ,
             "dokumente": [],
@@ -181,7 +181,7 @@ def test__check_and_create_vote_outcome_station__angenommen(make_station: Callab
     assert result is not None
     assert result.typ == Stationstyp.PARL_AKZEPTANZ
     assert result.titel == "Angenommen"
-    assert result.zp_start == station.zp_start + datetime.timedelta(minutes=30)
+    assert result.zp_start == station.zp_start + dt.timedelta(minutes=30)
 
 
 @pytest.mark.parametrize(
@@ -196,7 +196,7 @@ def test__check_and_create_vote_outcome_station__abgelehnt(make_station: Callabl
     assert result is not None
     assert result.typ == Stationstyp.PARL_ABLEHNUNG
     assert result.titel == "Abgelehnt"
-    assert result.zp_start == station.zp_start + datetime.timedelta(minutes=30)
+    assert result.zp_start == station.zp_start + dt.timedelta(minutes=30)
 
 
 @pytest.mark.parametrize(
@@ -211,7 +211,7 @@ def test__check_and_create_vote_outcome_station__zurueckgezogen(make_station: Ca
     assert result is not None
     assert result.typ == Stationstyp.PARL_ZURUECKGZ
     assert result.titel == "Zurückgezogen"
-    assert result.zp_start == station.zp_start + datetime.timedelta(minutes=30)
+    assert result.zp_start == station.zp_start + dt.timedelta(minutes=30)
 
 
 @pytest.mark.parametrize(

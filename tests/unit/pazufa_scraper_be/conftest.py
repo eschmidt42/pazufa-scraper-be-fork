@@ -85,4 +85,5 @@ def apr_data(base_dok_data: dict[str, Any]) -> dict[str, Any]:
         **base_dok_data,
         "DokArt": "APr",
         "Urheber": ["Author A"],
+        "LokURL": "https://example.com/doc123-wp.pdf",
     }

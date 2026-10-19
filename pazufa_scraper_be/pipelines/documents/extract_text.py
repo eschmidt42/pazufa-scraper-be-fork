@@ -1,15 +1,13 @@
 import logging
-from pathlib import Path
 from typing import Self
 
-import magic
 import xberg
 from scrapy.exceptions import DropItem
 from xberg import ExtractInput, ExtractInputKind, ExtractionConfig, OcrConfig, PageConfig
 
-from pazufa_scraper_be.constants import DOKUMENT_FILE_NAME, TEXT_FILE_NAME
+from pazufa_scraper_be.cache import Key
 from pazufa_scraper_be.pardok import GesetzVorgang
-from pazufa_scraper_be.pipelines._base import CacheDirPipeline, StatsPipeline
+from pazufa_scraper_be.pipelines._base import CachePipeline, StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import TextCounter
 
 logger = logging.getLogger(__name__)
@@ -32,8 +30,8 @@ def _get_xberg_config(*, ocr: bool) -> ExtractionConfig:
     return ExtractionConfig(enable_quality_processing=True, pages=page_config, use_cache=False, ocr=ocr_config, force_ocr=force_ocr)
 
 
-async def _extract_text(document_file: Path, *, ocr: bool) -> str:
-    extract_input = ExtractInput(kind=ExtractInputKind.URI, uri=str(document_file))
+async def _extract_text(document_bytes: bytes, *, ocr: bool) -> str:
+    extract_input = ExtractInput(kind=ExtractInputKind.BYTES, bytes=document_bytes)  # ty: ignore[invalid-argument-type] NOTE: This is actually fine and should be a temporary bug
     extraction_result = await xberg.extract(
         input=extract_input,
         config=_get_xberg_config(ocr=ocr),
@@ -43,12 +41,12 @@ async def _extract_text(document_file: Path, *, ocr: bool) -> str:
 
     # In the few cases, where we could not extract text, apply OCR
     if len(text) == 0 and not ocr:
-        return await _extract_text(document_file=document_file, ocr=True)
+        return await _extract_text(document_bytes=document_bytes, ocr=True)
 
     return text
 
 
-class ExtractTextFromPDF(CacheDirPipeline, StatsPipeline):
+class ExtractTextFromPDF(CachePipeline, StatsPipeline):
     """Pipeline that extracts plain text from cached PDF documents using xberg."""
 
     async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:
@@ -59,22 +57,15 @@ class ExtractTextFromPDF(CacheDirPipeline, StatsPipeline):
 
         for dokument in vorgang.dokumente:
             for dokument_url in dokument.all_urls:
-                dokument_cache_dir = self.get_dokument_cache_dir(dokument=dokument, url=dokument_url)
-                if dokument_cache_dir is None:
-                    msg = f"[{vorgang.id} - {dokument.id}]: Did not get cache dir for additional URL: {dokument_url}"
-                    logger.warning(msg)
-                    continue
+                cache = self.get_cache(document=dokument, document_url=dokument_url)
 
-                dokument_file = dokument_cache_dir / DOKUMENT_FILE_NAME
-                dokument_text_file = dokument_cache_dir / TEXT_FILE_NAME
-
-                if dokument_file.exists():
-                    if dokument_text_file.exists():
+                if Key.DOCUMENT in cache:
+                    if Key.TEXT in cache:
                         self.increment_stats(TextCounter.CACHE_HIT)
                         continue
 
                     self.increment_stats(TextCounter.CACHE_MISS)
-                    text = await _extract_text(document_file=dokument_file, ocr=False)
+                    text = await _extract_text(document_bytes=cache.get_bytes(Key.DOCUMENT), ocr=False)
 
                     # fmt: off
                     # Some postprocessing that was necessary after eyeballing documents
@@ -91,21 +82,8 @@ class ExtractTextFromPDF(CacheDirPipeline, StatsPipeline):
                         msg = f"[{vorgang.id} - {dokument.id}]: No text extracted."
                         logger.warning(msg)
 
-                    elif magic.from_buffer(text, mime=True) != "text/plain":
-                        error_file = self.get_errors_dir() / f"{dokument.id}.text"
-                        error_file.write_text(text)
-
-                        # NOTE: This is a hack, where the mime type of the saved file gets 'text/plain', which is causing issues
-                        if magic.from_file(error_file, mime=True) == "text/plain":
-                            error_file.rename(dokument_text_file)
-
-                        else:
-                            self.increment_stats(TextCounter.EXTRACT_FAILED_NOT_PLAIN_TEXT)
-                            msg = f"[{vorgang.id} - {dokument.id}]: Extracted text is not plain text."
-                            logger.warning(msg)
-
                     else:
                         self.increment_stats(TextCounter.EXTRACT_DONE)
-                        dokument_text_file.write_text(text)
+                        cache[Key.TEXT] = text
 
         return vorgang

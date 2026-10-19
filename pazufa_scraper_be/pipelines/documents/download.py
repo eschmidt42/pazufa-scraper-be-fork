@@ -1,8 +1,6 @@
-import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
-from pathlib import Path
 from typing import Self
 
 from pydantic import HttpUrl
@@ -12,18 +10,10 @@ from scrapy.exceptions import DropItem
 from scrapy.http import Response
 from scrapy.http.request import NO_CALLBACK
 
-from pazufa_scraper_be.constants import (
-    DOCUMENT_CHECK_MODIFIED_EVERY_DAYS,
-    DOK_CACHE_HISTORY_SUB_DIR_NAME,
-    DOKUMENT_FILE_NAME,
-    DOWNLOAD_TIME_FILE_NAME,
-    FILE_BYTE_HASH_FILE_NAME,
-    LAST_CHECKED_FILE_NAME,
-    LAST_MODIFIED_FILE_NAME,
-    URL_FILE_NAME,
-)
+from pazufa_scraper_be.cache import Cache, Key
+from pazufa_scraper_be.constants import DOCUMENT_CHECK_MODIFIED_EVERY_DAYS
 from pazufa_scraper_be.pardok import GesetzVorgang
-from pazufa_scraper_be.pipelines._base import CacheDirPipeline, StatsPipeline
+from pazufa_scraper_be.pipelines._base import CachePipeline, StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
 
 logger = logging.getLogger(__name__)
@@ -31,55 +21,46 @@ logger = logging.getLogger(__name__)
 LAST_MODIFIED_TIME_FORMAT = "%a, %d %b %Y %H:%M:%S %Z"
 
 
-def _reset_cache_dir(cache_dir: Path) -> None:
-    history_dir = cache_dir / DOK_CACHE_HISTORY_SUB_DIR_NAME
-    history_dir.mkdir(parents=True, exist_ok=True)
-
-    existing = [int(p.name) for p in history_dir.iterdir() if p.is_dir() and p.name.isdigit()]
-    n = max(existing, default=0) + 1
-    version_dir = history_dir / str(n)
-    version_dir.mkdir()
-
-    for file in cache_dir.iterdir():
-        if file.is_file():
-            file.rename(version_dir / file.name)
-
-
-async def _reset_cache_if_file_got_modified(dokument_cache_dir: Path, dokument_url: HttpUrl, engine: ExecutionEngine) -> bool:
-    dokument_download_time_file = dokument_cache_dir / DOWNLOAD_TIME_FILE_NAME
-    dokument_last_modified_file = dokument_cache_dir / LAST_MODIFIED_FILE_NAME
-    dokument_last_checked_file = dokument_cache_dir / LAST_CHECKED_FILE_NAME
-
-    download_time_from_cache = datetime.fromisoformat(dokument_download_time_file.read_text()).astimezone(UTC)
-    last_check_time_from_cache = datetime.fromisoformat(dokument_last_checked_file.read_text()).astimezone(UTC) if dokument_last_checked_file.exists() else None
-
-    check_due = last_check_time_from_cache is None or (datetime.now(UTC) - last_check_time_from_cache) >= timedelta(days=DOCUMENT_CHECK_MODIFIED_EVERY_DAYS)
-    download_grace_period_done = (datetime.now(UTC) - download_time_from_cache) >= timedelta(days=DOCUMENT_CHECK_MODIFIED_EVERY_DAYS)
-
-    if not download_grace_period_done or not check_due:
+async def _reset_cache_if_file_got_modified(cache: Cache, dokument_url: HttpUrl, engine: ExecutionEngine) -> bool:
+    download_time = cache.get_timestamp(Key.DOWNLOAD_TIME)
+    if not download_time:
         return False
 
-    # Check if remote file got modified, if so reset cache
-    dokument_last_checked_file.write_text(datetime.now(UTC).isoformat())
-    last_modified_time_from_cache = datetime.fromisoformat(dokument_last_modified_file.read_text()).astimezone(UTC)
+    if not _is_recheck_due(cache.get_last_checked(), download_time):
+        return False
 
+    last_modified = await _fetch_last_modified(dokument_url, engine)
+    cache.update_last_checked()
+
+    if last_modified is None or cache[Key.LAST_MODIFIED] == last_modified:
+        return False
+
+    cache.reset()
+    return True
+
+
+def _is_recheck_due(last_check_time: datetime | None, download_time: datetime) -> bool:
+    interval = timedelta(days=DOCUMENT_CHECK_MODIFIED_EVERY_DAYS)
+    check_due = last_check_time is None or (datetime.now(UTC) - last_check_time) >= interval
+    grace_period_done = (datetime.now(UTC) - download_time) >= interval
+    return check_due and grace_period_done
+
+
+async def _fetch_last_modified(dokument_url: HttpUrl, engine: ExecutionEngine) -> datetime | None:
     request = Request(dokument_url.encoded_string(), method="HEAD", callback=NO_CALLBACK)
     response = await engine.download_async(request)
-    if last_modified_header_as_byte := response.headers.get("Last-Modified"):
-        last_modified_time_from_header = datetime.strptime(last_modified_header_as_byte.decode("utf-8"), LAST_MODIFIED_TIME_FORMAT).astimezone(UTC)
+    header = response.headers.get("Last-Modified")
+    if not header:
+        return None
 
-        if last_modified_time_from_cache != last_modified_time_from_header:
-            _reset_cache_dir(dokument_cache_dir)
-            return True
-
-    return False
+    return datetime.strptime(header.decode("utf-8"), LAST_MODIFIED_TIME_FORMAT).astimezone(tz=UTC)
 
 
-class DownloadAndCacheDocuments(CacheDirPipeline, StatsPipeline):
+class DownloadAndCacheDocuments(CachePipeline, StatsPipeline):
     """Pipeline that downloads and caches PDF documents for each Vorgang."""
 
     # TODO(anyone): refactor to reduce complexity
-    async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:  # noqa: C901, PLR0912, PLR0915
+    async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:  # noqa: C901
         """Download and cache all document PDFs for the given Vorgang."""
         if not isinstance(vorgang, GesetzVorgang):
             msg = f"Expected {GesetzVorgang.__name__} object but got {vorgang.__class__.__name__}."
@@ -99,25 +80,10 @@ class DownloadAndCacheDocuments(CacheDirPipeline, StatsPipeline):
                 continue
 
             for dokument_url in dokument.all_urls:
-                dokument_cache_dir = self.get_dokument_cache_dir(dokument=dokument, url=dokument_url)
-                if dokument_cache_dir is None:
-                    msg = f"[{vorgang.id} - {dokument.id}]: Did not get cache dir for additional URL: {dokument_url}"
-                    logger.warning(msg)
-                    continue
+                cache = self.get_cache(document=dokument, document_url=dokument_url)
 
-                dokument_file = dokument_cache_dir / DOKUMENT_FILE_NAME
-                dokument_url_file = dokument_cache_dir / URL_FILE_NAME
-                dokument_download_time_file = dokument_cache_dir / DOWNLOAD_TIME_FILE_NAME
-                dokument_last_modified_file = dokument_cache_dir / LAST_MODIFIED_FILE_NAME
-                dokument_file_byte_hash_file = dokument_cache_dir / FILE_BYTE_HASH_FILE_NAME
-
-                # TODO(anyone): https://codeberg.org/PaZuFa/pazufa-scraper-be/issues/30
-                if dokument_file.exists():
-                    self.increment_stats(DokumentCounter.CACHE_HIT)
-                    continue
-
-                if dokument_file.exists():
-                    if await _reset_cache_if_file_got_modified(dokument_cache_dir=dokument_cache_dir, dokument_url=dokument_url, engine=self.crawler.engine):
+                if Key.DOCUMENT in cache:
+                    if await _reset_cache_if_file_got_modified(cache, dokument_url, engine=self.crawler.engine):
                         self.increment_stats(DokumentCounter.CACHE_RESET)
 
                     else:
@@ -143,17 +109,11 @@ class DownloadAndCacheDocuments(CacheDirPipeline, StatsPipeline):
                     continue
 
                 if last_modified_header_as_byte := response.headers.get("Last-Modified"):
-                    last_modified_as_iso = (
-                        datetime.strptime(last_modified_header_as_byte.decode("utf-8"), LAST_MODIFIED_TIME_FORMAT).astimezone(UTC).isoformat()
-                    )
-                    dokument_last_modified_file.write_text(last_modified_as_iso)
-
-                dokument_file_byte_hash = hashlib.sha256(response.body).hexdigest()
-                dokument_file_byte_hash_file.write_text(dokument_file_byte_hash)
+                    cache[Key.LAST_MODIFIED] = datetime.strptime(last_modified_header_as_byte.decode("utf-8"), LAST_MODIFIED_TIME_FORMAT).astimezone(UTC)
 
                 self.increment_stats(DokumentCounter.DOWNLOAD_DONE)
-                dokument_url_file.write_text(response.url)
-                dokument_download_time_file.write_text(download_time.isoformat())
-                dokument_file.write_bytes(response.body)
+                cache[Key.URL] = response.url
+                cache[Key.DOWNLOAD_TIME] = download_time
+                cache[Key.DOCUMENT] = response.body
 
         return vorgang

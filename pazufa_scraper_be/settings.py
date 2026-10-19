@@ -11,8 +11,8 @@ commonly used. You can find more settings consulting the documentation:
 
 import os
 import uuid
-from pathlib import Path
 
+from pazufa_scraper_be.constants import CACHE_DIR_PATH
 from pazufa_scraper_be.extensions.mattermost import MattermostNotifier
 from pazufa_scraper_be.extensions.temp_error_dir import TempErrorDirectory
 from pazufa_scraper_be.pipelines import (
@@ -42,8 +42,7 @@ MATTERMOST_TOKEN = os.environ.get("PAZUFA_MATTERMOST_TOKEN")
 
 # Custom Settings
 SCRAPER_UUID = uuid.UUID("05dc56fc-24e1-442b-9f97-91d596d50471")
-CACHE_DIR = Path(".cache")
-ERRORS_DIR = Path(".errors")
+CACHE_DIR = CACHE_DIR_PATH
 
 # Scrapy Settings
 BOT_NAME = "PaZuFa_Berlin_Scraper"

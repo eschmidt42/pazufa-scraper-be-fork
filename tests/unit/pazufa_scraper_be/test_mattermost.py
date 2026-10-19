@@ -1,5 +1,5 @@
 import asyncio
-import datetime
+import datetime as dt
 from collections.abc import Callable
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -102,7 +102,7 @@ def full_stats_w_submit(make_stats: Callable[..., Any]) -> dict[str, Any]:
             "downloader/response_status_count/404": 1693,
             "elapsed_time_seconds": 20.481048499999815,
             "finish_reason": "finished",
-            "finish_time": datetime.datetime(2026, 6, 4, 6, 1, 32, 591766, tzinfo=datetime.UTC),
+            "finish_time": dt.datetime(2026, 6, 4, 6, 1, 32, 591766, tzinfo=dt.UTC),
             "httpcache/hit": 5853,
             "httpcompression/response_bytes": 50733191,
             "httpcompression/response_count": 1,
@@ -120,7 +120,7 @@ def full_stats_w_submit(make_stats: Callable[..., Any]) -> dict[str, Any]:
             "scheduler/dequeued/memory": 1,
             "scheduler/enqueued": 1,
             "scheduler/enqueued/memory": 1,
-            "start_time": datetime.datetime(2026, 6, 4, 6, 1, 12, 110695, tzinfo=datetime.UTC),
+            "start_time": dt.datetime(2026, 6, 4, 6, 1, 12, 110695, tzinfo=dt.UTC),
         }
     )
 
@@ -148,7 +148,7 @@ def full_stats_wo_submit(make_stats: Callable[..., Any]) -> dict[str, Any]:
             "downloader/response_status_count/404": 1693,
             "elapsed_time_seconds": 9.051556291999987,
             "finish_reason": "finished",
-            "finish_time": datetime.datetime(2026, 6, 4, 6, 1, 18, 636056, tzinfo=datetime.UTC),
+            "finish_time": dt.datetime(2026, 6, 4, 6, 1, 18, 636056, tzinfo=dt.UTC),
             "httpcache/hit": 5853,
             "httpcompression/response_bytes": 50733191,
             "httpcompression/response_count": 1,
@@ -166,7 +166,7 @@ def full_stats_wo_submit(make_stats: Callable[..., Any]) -> dict[str, Any]:
             "scheduler/dequeued/memory": 1,
             "scheduler/enqueued": 1,
             "scheduler/enqueued/memory": 1,
-            "start_time": datetime.datetime(2026, 6, 4, 6, 1, 9, 584488, tzinfo=datetime.UTC),
+            "start_time": dt.datetime(2026, 6, 4, 6, 1, 9, 584488, tzinfo=dt.UTC),
         }
     )
 

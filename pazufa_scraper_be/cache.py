@@ -2,9 +2,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Self
 
-from pazufa_scraper_be.cache_lib import Cache as _Cache
-from pazufa_scraper_be.cache_lib import FileSystemBackend, Value
-from pazufa_scraper_be.cache_lib import Key as _Key
+from pazufa_corelib.cache import Cache as _Cache
+from pazufa_corelib.cache import FileSystemBackend, Value
+from pazufa_corelib.cache import Key as _Key
+
 from pazufa_scraper_be.constants import DOK_CACHE_HISTORY_SUB_DIR_PATH
 
 

@@ -1,4 +1,4 @@
-import datetime
+import datetime as dt
 from typing import Any
 
 import pytest
@@ -22,8 +22,8 @@ def _make_pazufa_dokument(schlagworte: list[str] | None = None) -> PaZuFaDokumen
         typ=Doktyp.ENTWURF,
         titel="Test",
         volltext="",
-        zp_modifiziert=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC),
-        zp_referenz=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC),
+        zp_modifiziert=dt.datetime(2024, 1, 1, tzinfo=dt.UTC),
+        zp_referenz=dt.datetime(2024, 1, 1, tzinfo=dt.UTC),
         link="https://example.com/doc",
         hash_="abc123",
         autoren=[],

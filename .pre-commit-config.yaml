@@ -15,26 +15,35 @@ repos:
     exclude: tests/unit/pazufa_scraper_be/helpers\.py
   - id: check-yaml
   - id: debug-statements
+- repo: https://github.com/kynan/nbstripout
+  rev: 0.8.1
+  hooks:
+  - id: nbstripout
+    args:
+      [
+        "--extra-keys",
+        "metadata.interpreter metadata.kernelspec cell.metadata.pycharm",
+      ]
 - repo: local
   hooks:
   - id: ruff-check
     name: linting
-    entry: uv run ruff check
+    entry: uv run ruff check pazufa_scraper_be/ tests/ notebooks/
     pass_filenames: false
     language: system
-    types_or: [python, pyi]
+    types_or: [python, pyi, jupyter]
   - id: ruff-format
     name: formatting
-    entry: uv run ruff format
+    entry: uv run ruff format pazufa_scraper_be/ tests/ notebooks/
     pass_filenames: false
     language: system
     types_or: [python, pyi]
   - id: ty
     name: type check
-    entry: uv run ty check pazufa_scraper_be/ tests/
+    entry: uv run ty check pazufa_scraper_be/ tests/ notebooks/
     pass_filenames: false
     language: system
-    types_or: [python, pyi]
+    types_or: [python, pyi, jupyter]
   - id: test
     name: test
     entry: uv run pytest tests/unit

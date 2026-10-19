@@ -8,9 +8,9 @@ from pazufa_corelib.api_client import AuthenticatedClient
 from pazufa_corelib.llm import LLMConnector
 from pydantic import HttpUrl
 from scrapy.crawler import Crawler
-from scrapy.statscollectors import StatsCollector
 
-from pazufa_scraper_be.constants import DOK_BASE_URL
+from pazufa_scraper_be.cache import Cache
+from pazufa_scraper_be.constants import DOK_BASE_URL, DOK_CACHE_SUB_DIR_PATH
 from pazufa_scraper_be.pardok import AnyGesetzDokument
 from pazufa_scraper_be.pipelines.stats_counter import StatsCounter
 
@@ -48,43 +48,31 @@ class StatsPipeline(BasePipeline):
         self.stats = self.crawler.stats
 
     def increment_stats(self: Self, counter: StatsCounter | str) -> None:
-        if self.stats is not None:
-            key = counter.value if isinstance(counter, StatsCounter) else counter
-            self.stats.inc_value(key)
+        key = counter.value if isinstance(counter, StatsCounter) else counter
+        self.stats.inc_value(key)
 
 
-class CacheDirPipeline(BasePipeline):
+class CachePipeline(BasePipeline):
     def init(self: Self) -> None:
         super().init()
 
-        self._cache_dir = Path(self.crawler.settings.get("CACHE_DIR")) / str(self.wahlperiode)
-        self._errors_dir = Path(self.crawler.settings.get("ERRORS_DIR")) / str(self.wahlperiode)
+        cache_dir = self.crawler.settings.get("CACHE_DIR")
 
-        if self._cache_dir is None:
+        if not isinstance(cache_dir, (str, Path)):
             msg = "Missing CACHE_DIR setting."
+            raise TypeError(msg)
+
+        self._cache_dir = Path(cache_dir) / str(self.wahlperiode)
+        self._dok_cache_dir = self._cache_dir / DOK_CACHE_SUB_DIR_PATH
+
+    def get_cache(self: Self, document: AnyGesetzDokument, document_url: HttpUrl) -> Cache:
+
+        if document_url != document.lok_url and document.additional_urls and document_url not in document.additional_urls:
+            msg = f"[{document.vorgang.id} - {document.id}]: Did not setup dokument cache because given URL is unknown: {document_url}"
             raise ValueError(msg)
 
-        if self._errors_dir is None:
-            msg = "Missing ERRORS_DIR setting."
-            raise ValueError(msg)
-
-    def get_dokument_cache_dir(self: Self, dokument: AnyGesetzDokument, url: HttpUrl) -> Path | None:
-        if url != dokument.lok_url and dokument.additional_urls and url not in dokument.additional_urls:
-            return None
-
-        # NOTE: cache dir is Dokument URL without constant base, we replace 'Dok Art' part to be consistent
-        # with rest of code base and drop the '.pdf' suffix in dir name.
-        dokument_cache_dir = self._cache_dir / "dokument" / dokument.art
-        dokument_cache_dir = dokument_cache_dir.joinpath(*Path(str(url).removeprefix(f"{DOK_BASE_URL}/{self.wahlperiode}/")).with_suffix("").parts[1:])
-
-        dokument_cache_dir.mkdir(parents=True, exist_ok=True)
-        return dokument_cache_dir
-
-    def get_errors_dir(self: Self) -> Path:
-        crawl_start_time = self.crawler.stats.get_value("start_time").strftime("%Y-%m-%dT%H:%M:%S") if isinstance(self.crawler.stats, StatsCollector) else ""
-        errors_dir = self._errors_dir / crawl_start_time
-        errors_dir.mkdir(parents=True, exist_ok=True)
-        return errors_dir
+        cache_name = Path(document.art).joinpath(*Path(str(document_url).removeprefix(f"{DOK_BASE_URL}/{self.wahlperiode}/")).with_suffix("").parts[1:])
+        return Cache(base_dir=self._dok_cache_dir, name=str(cache_name))
 
 
 class ApiPipeline(BasePipeline):
