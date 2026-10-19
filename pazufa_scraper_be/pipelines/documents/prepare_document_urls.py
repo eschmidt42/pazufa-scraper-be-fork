@@ -2,12 +2,11 @@ import logging
 from typing import Self
 
 from pydantic import HttpUrl
-from scrapy.crawler import Crawler
-from scrapy.exceptions import DropItem
 
 from pazufa_scraper_be.pardok import AnyGesetzDokument, APrDokument, GesetzVorgang, PlPrDokument
 from pazufa_scraper_be.pardok.dokument import ProtokollTyp
 from pazufa_scraper_be.pardok.url import build_ausschussprotokoll_variant_url, build_plenarprotokoll_url, resolve_document_urls
+from pazufa_scraper_be.pipeline_guards import engine_guard, vorgang_guard
 from pazufa_scraper_be.pipelines._base import StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
 
@@ -41,20 +40,6 @@ def _add_additional_urls(dokument: AnyGesetzDokument) -> None:
             additional_urls.append(url)
 
     dokument.additional_urls = additional_urls or None
-
-
-def vorgang_guard(vorgang: GesetzVorgang) -> None:
-    """Guards against unexpected `vorgang` type passed at runtime."""
-    if not isinstance(vorgang, GesetzVorgang):
-        msg = f"Expected {GesetzVorgang.__name__} object but got {vorgang.__class__.__name__}."
-        raise DropItem(msg)
-
-
-def engine_guard(crawler: Crawler) -> None:
-    """Guards against missing crawler engine."""
-    if crawler.engine is None:
-        msg = "crawler.engine is None. The crawler seems improperly initialized."
-        raise ValueError(msg)
 
 
 class PrepareDocumentUrls(StatsPipeline):
