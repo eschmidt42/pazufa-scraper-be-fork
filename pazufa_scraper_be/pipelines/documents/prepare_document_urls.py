@@ -1,45 +1,13 @@
 import logging
 from typing import Self
 
-from pydantic import HttpUrl
-
-from pazufa_scraper_be.pardok import AnyGesetzDokument, APrDokument, GesetzVorgang, PlPrDokument
-from pazufa_scraper_be.pardok.dokument import ProtokollTyp
-from pazufa_scraper_be.pardok.url import build_ausschussprotokoll_variant_url, build_plenarprotokoll_url, resolve_document_urls
+from pazufa_scraper_be.pardok import GesetzVorgang
+from pazufa_scraper_be.pardok.url import add_additional_urls, add_missing_plprdokument_primary_url, fix_url, resolve_document_urls
 from pazufa_scraper_be.pipeline_guards import engine_guard, vorgang_guard
 from pazufa_scraper_be.pipelines._base import StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
 
 logger = logging.getLogger(__name__)
-
-CORRECTED_URL_PART = "/h/h19-076-"
-INCORRECT_URL_PART = "/iso/h19-076-"
-
-
-def _add_missing_primary_url(wahlperiode: int, dokument: AnyGesetzDokument) -> None:
-
-    # TODO(se-jaeger): Similarly could work for Ausschussprotokolle but those are trickier due to their URL containing abbreviation of Ausschussname
-    if isinstance(dokument, PlPrDokument) and dokument.lok_url is None:
-        dokument.lok_url = build_plenarprotokoll_url(wahlperiode, dokument.nr)
-
-
-def _add_additional_urls(dokument: AnyGesetzDokument) -> None:
-    # Ausschussprotokolle can have up to three documents: Beschlussprotokoll, Inhaltsprotokoll and Wortprotokoll.
-    # The last two are optional but the pardok XML does not always serve the first one.
-    # So we order here to our liking.
-    if not isinstance(dokument, APrDokument) or dokument.lok_url is None:
-        return
-
-    additional_urls = []
-    for typ in ProtokollTyp:
-        url = build_ausschussprotokoll_variant_url(dokument.lok_url, typ)
-        if typ is ProtokollTyp.Beschluss:
-            dokument.lok_url = url
-
-        else:
-            additional_urls.append(url)
-
-    dokument.additional_urls = additional_urls or None
 
 
 class PrepareDocumentUrls(StatsPipeline):
@@ -51,16 +19,12 @@ class PrepareDocumentUrls(StatsPipeline):
         engine_guard(self.crawler)
 
         for dokument in vorgang.dokumente:
-            # NOTE: We need to fix this that early.
-            # Using Rule is not possible because we already tried to download the incorrect URL.
-            # We could change it and yield a new (changed) Item from a later stage
-            if INCORRECT_URL_PART in str(dokument.lok_url):
-                dokument.lok_url = HttpUrl(str(dokument.lok_url).replace(INCORRECT_URL_PART, CORRECTED_URL_PART))
-
-            _add_missing_primary_url(self.wahlperiode, dokument)
-            _add_additional_urls(dokument)
+            fix_url(dokument)
+            add_missing_plprdokument_primary_url(dokument, self.wahlperiode)
+            add_additional_urls(dokument)
 
             res = await resolve_document_urls(dokument, self.crawler.engine)
+
             if res.missing_primary:
                 self.increment_stats(DokumentCounter.MISSING_PRIMARY)
                 msg = f"[{dokument.vorgang.id} - {dokument.id}]: Missing URL."
