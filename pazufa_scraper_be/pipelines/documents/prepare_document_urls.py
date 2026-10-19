@@ -16,8 +16,8 @@ CORRECTED_URL_PART = "/h/h19-076-"
 INCORRECT_URL_PART = "/iso/h19-076-"
 
 
-class FixAndAddUrls(StatsPipeline):
-    """Pipeline that fixes and adds additional URLs."""
+class PrepareDocumentUrls(StatsPipeline):
+    """Pipeline that fixes and adds additional document URLs."""
 
     def _add_missing_primary_url(self: Self, dokument: AnyGesetzDokument) -> None:
 

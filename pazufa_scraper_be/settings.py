@@ -19,8 +19,8 @@ from pazufa_scraper_be.pipelines import (
     BuildPaZuFaVorgang,
     DownloadAndCacheDocuments,
     ExtractTextFromPDF,
-    FixAndAddUrls,
     HandleErrors,
+    PrepareDocumentUrls,
     SubmitVorgang,
     SummarizeExtractedPDFText,
 )
@@ -71,7 +71,7 @@ ITEM_PIPELINES = {
     # NOTE: Pipelines with <100 get proper items or dicts, which contain data an error.
     HandleErrors: 99,
     # NOTE: Pipelines with >= 100 only get properly parsed items.
-    FixAndAddUrls: 100,
+    PrepareDocumentUrls: 100,
     DownloadAndCacheDocuments: 110,
     ExtractTextFromPDF: 120,
     SummarizeExtractedPDFText: 130,

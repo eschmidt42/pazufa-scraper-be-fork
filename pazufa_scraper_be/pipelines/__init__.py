@@ -2,7 +2,7 @@ from .build_vorgang.build_vorgang import BuildPaZuFaVorgang
 from .documents import (
     DownloadAndCacheDocuments,
     ExtractTextFromPDF,
-    FixAndAddUrls,
+    PrepareDocumentUrls,
     SummarizeExtractedPDFText,
 )
 from .handle_errors import HandleErrors
@@ -12,8 +12,8 @@ __all__ = [
     "BuildPaZuFaVorgang",
     "DownloadAndCacheDocuments",
     "ExtractTextFromPDF",
-    "FixAndAddUrls",
     "HandleErrors",
+    "PrepareDocumentUrls",
     "SubmitVorgang",
     "SummarizeExtractedPDFText",
 ]
