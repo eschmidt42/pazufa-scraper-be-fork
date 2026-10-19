@@ -14,17 +14,23 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
+local_dev = [
   "ipywidgets>=8.1.9",
   "jupyterlab>=4.5.7",
   "jupyterlab-vim>=4.1.4",
   "polars>=2.0.0",
   "prek>=0.4.3",
+]
+code_hygiene = [
   "pytest>=9.0.3",
   "pytest-cov>=7.1.0",
   "ruff>=0.15.15",
   "ty>=0.0.40",
   "types-lxml>=2026.2.16",
+]
+dev = [
+  { include-group = "local_dev" },
+  { include-group = "code_hygiene" },
 ]
 
 [tool.coverage.run]

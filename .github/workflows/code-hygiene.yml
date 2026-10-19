@@ -34,16 +34,16 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install project and dev tools
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group code_hygiene
 
       - name: Lint
-        run: uv run --frozen --group dev ruff check --no-fix .
+        run: uv run --frozen --group code_hygiene ruff check --no-fix .
 
       - name: Check formatting
-        run: uv run --frozen --group dev ruff format --check .
+        run: uv run --frozen --group code_hygiene ruff format --check .
 
       - name: Run unit tests and show coverage
         run: |
-          uv run --frozen --group dev pytest tests/unit \
+          uv run --frozen --group code_hygiene pytest tests/unit \
             --cov \
             --cov-report=term-missing
