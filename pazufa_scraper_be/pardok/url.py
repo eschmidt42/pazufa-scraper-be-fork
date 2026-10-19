@@ -9,8 +9,11 @@ from scrapy.core.engine import ExecutionEngine
 from scrapy.http.request import NO_CALLBACK
 
 from pazufa_scraper_be.constants import DOK_BASE_URL
-from pazufa_scraper_be.pardok import AnyGesetzDokument
+from pazufa_scraper_be.pardok import AnyGesetzDokument, APrDokument, PlPrDokument
 from pazufa_scraper_be.pardok.dokument import ProtokollTyp
+
+CORRECTED_URL_PART = "/h/h19-076-"
+INCORRECT_URL_PART = "/iso/h19-076-"
 
 
 def build_plenarprotokoll_url(wahlperiode: int, dokument_nr: str) -> HttpUrl | None:
@@ -49,6 +52,39 @@ def build_ausschussprotokoll_variant_url(url: HttpUrl, typ: ProtokollTyp) -> Htt
     return HttpUrl(str(url).replace(url.path, new_path))
 
 
+def fix_url(dokument: AnyGesetzDokument) -> HttpUrl | None:
+    """Swap incorrect for correct url part, if detected."""
+    # NOTE: We need to fix this that early.
+    # Using Rule is not possible because we already tried to download the incorrect URL.
+    # We could change it and yield a new (changed) Item from a later stage
+    if INCORRECT_URL_PART in str(dokument.lok_url):
+        return HttpUrl(str(dokument.lok_url).replace(INCORRECT_URL_PART, CORRECTED_URL_PART))
+    return dokument.lok_url
+
+
+def add_missing_plprdokument_primary_url(dokument: AnyGesetzDokument, wahlperiode: int) -> HttpUrl | None:
+    """Construct url, if missing, for PlPrDokument."""
+    # TODO(se-jaeger): Similarly could work for Ausschussprotokolle but those are trickier due to their URL containing abbreviation of Ausschussname
+    if isinstance(dokument, PlPrDokument) and dokument.lok_url is None:
+        return build_plenarprotokoll_url(wahlperiode, dokument.nr)
+    return dokument.lok_url
+
+
+def add_additional_urls(dokument: AnyGesetzDokument) -> tuple[HttpUrl | None, list[HttpUrl] | None]:
+    """Construct and order additionl urls.
+
+    Ausschussprotokolle can have up to three documents: Beschlussprotokoll, Inhaltsprotokoll and Wortprotokoll.
+    The last two are optional but the pardok XML does not always serve the first one.
+    So we order here to our liking.
+    """
+    if not isinstance(dokument, APrDokument) or dokument.lok_url is None:
+        return dokument.lok_url, dokument.additional_urls
+
+    additional_urls = [build_ausschussprotokoll_variant_url(dokument.lok_url, typ) for typ in (ProtokollTyp.Inhalt, ProtokollTyp.Wort)]
+    lok_url = build_ausschussprotokoll_variant_url(dokument.lok_url, ProtokollTyp.Beschluss)
+    return lok_url, additional_urls or None
+
+
 @dataclass
 class UrlResolution:
     """Data container summarizing resolve_dokument_urls outcome."""
@@ -75,7 +111,7 @@ async def url_is_reachable(engine: ExecutionEngine, url: HttpUrl | None) -> bool
     return response.status == HTTPStatus.OK
 
 
-async def resolve_document_urls(dokument: AnyGesetzDokument, engine: ExecutionEngine) -> UrlResolution:
+async def resolve_document_urls(dokument: AnyGesetzDokument, engine: ExecutionEngine) -> tuple[list[HttpUrl] | None, UrlResolution]:
     """Single pass: probe primary once, probe each additional once, then mutate."""
     additional_urls = dokument.additional_urls or []
 
@@ -95,9 +131,11 @@ async def resolve_document_urls(dokument: AnyGesetzDokument, engine: ExecutionEn
         recovered_from = reachable.pop(0)
         dokument.lok_url = recovered_from
 
-    dokument.additional_urls = reachable or None
-    return UrlResolution(
+    additional_urls = reachable or None
+
+    res = UrlResolution(
         primary_was_reachable=primary_ok,
         recovered_from=recovered_from,
         pruned=pruned,
     )
+    return additional_urls, res
