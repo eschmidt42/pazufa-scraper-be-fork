@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from enum import StrEnum
-from typing import TYPE_CHECKING, Annotated, Literal, get_args
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, HttpUrl, PrivateAttr, ValidationError
 
@@ -160,12 +160,12 @@ class DrsDokument(BaseGesetzDokument, DeskTitelSbMixin):
             self.urheber = ["Landesregierung"]
 
 
-AnyGesetzDokument = PlPrDokument | GVBlDokument | APrDokument | DrsDokument
+type AnyGesetzDokument = PlPrDokument | GVBlDokument | APrDokument | DrsDokument
 
 
 def parse_dokument(data: dict | AnyGesetzDokument) -> AnyGesetzDokument | None:
     """Parse a raw dict or existing model into the appropriate AnyGesetzDokument subtype."""
-    if isinstance(data, get_args(AnyGesetzDokument)):
+    if isinstance(data, (PlPrDokument, GVBlDokument, APrDokument, DrsDokument)):
         return data
 
     if not isinstance(data, dict):
