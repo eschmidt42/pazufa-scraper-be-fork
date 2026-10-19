@@ -1,0 +1,49 @@
+name: code hygiene
+
+env:
+  UV_VERSION: "0.12.15"
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+
+  checks:
+    name: Python checks
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.12"
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install project and dev tools
+        run: uv sync --frozen --group dev
+
+      - name: Lint
+        run: uv run --frozen --group dev ruff check --no-fix .
+
+      - name: Check formatting
+        run: uv run --frozen --group dev ruff format --check .
+
+      - name: Run unit tests and show coverage
+        run: |
+          uv run --frozen --group dev pytest tests/unit \
+            --cov \
+            --cov-report=term-missing
