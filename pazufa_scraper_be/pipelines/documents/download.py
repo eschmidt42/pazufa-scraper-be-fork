@@ -6,13 +6,14 @@ from typing import Self
 from pydantic import HttpUrl
 from scrapy import Request
 from scrapy.core.engine import ExecutionEngine
-from scrapy.exceptions import DropItem
+from scrapy.crawler import Crawler
 from scrapy.http import Response
 from scrapy.http.request import NO_CALLBACK
 
 from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.constants import DOCUMENT_CHECK_MODIFIED_EVERY_DAYS
-from pazufa_scraper_be.pardok import GesetzVorgang
+from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang
+from pazufa_scraper_be.pipeline_guards import engine_guard, vorgang_guard
 from pazufa_scraper_be.pipelines._base import CachePipeline, StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
 
@@ -21,7 +22,28 @@ logger = logging.getLogger(__name__)
 LAST_MODIFIED_TIME_FORMAT = "%a, %d %b %Y %H:%M:%S %Z"
 
 
+def _is_recheck_due(last_check_time: datetime | None, download_time: datetime) -> bool:
+    interval = timedelta(days=DOCUMENT_CHECK_MODIFIED_EVERY_DAYS)
+    now = datetime.now(UTC)
+    check_due = last_check_time is None or (now - last_check_time) >= interval
+    grace_period_done = (now - download_time) >= interval
+    return check_due and grace_period_done
+
+
+async def _fetch_last_modified(dokument_url: HttpUrl, engine: ExecutionEngine) -> datetime | None:
+    request = Request(dokument_url.encoded_string(), method="HEAD", callback=NO_CALLBACK)
+    response = await engine.download_async(request)
+    header = response.headers.get("Last-Modified")
+    if not header:
+        return None
+
+    return datetime.strptime(header.decode("utf-8"), LAST_MODIFIED_TIME_FORMAT).replace(tzinfo=UTC)
+
+
 async def _reset_cache_if_file_got_modified(cache: Cache, dokument_url: HttpUrl, engine: ExecutionEngine) -> bool:
+    if not cache.has_entry(key=Key.DOWNLOAD_TIME):
+        return False
+
     download_time = cache.get_timestamp(Key.DOWNLOAD_TIME)
     if not download_time:
         return False
@@ -39,81 +61,92 @@ async def _reset_cache_if_file_got_modified(cache: Cache, dokument_url: HttpUrl,
     return True
 
 
-def _is_recheck_due(last_check_time: datetime | None, download_time: datetime) -> bool:
-    interval = timedelta(days=DOCUMENT_CHECK_MODIFIED_EVERY_DAYS)
-    check_due = last_check_time is None or (datetime.now(UTC) - last_check_time) >= interval
-    grace_period_done = (datetime.now(UTC) - download_time) >= interval
-    return check_due and grace_period_done
+async def download_document(dokument_url: HttpUrl, crawler: Crawler) -> tuple[datetime, Response]:
+    """Download a single document."""
+    downloaded_at = datetime.now(tz=UTC)
+    request = Request(dokument_url.encoded_string(), callback=NO_CALLBACK)
+    response = await crawler.engine.download_async(request)
+    return downloaded_at, response
 
 
-async def _fetch_last_modified(dokument_url: HttpUrl, engine: ExecutionEngine) -> datetime | None:
-    request = Request(dokument_url.encoded_string(), method="HEAD", callback=NO_CALLBACK)
-    response = await engine.download_async(request)
-    header = response.headers.get("Last-Modified")
-    if not header:
-        return None
+def _is_in_current_wahlperiode(wahlperiode: int, vorgang: GesetzVorgang, dokument: AnyGesetzDokument) -> bool:
 
-    return datetime.strptime(header.decode("utf-8"), LAST_MODIFIED_TIME_FORMAT).astimezone(tz=UTC)
+    if dokument.wp != wahlperiode:
+        msg = f"[{vorgang.id} - {dokument.id}]: Wahlperiode from scraping run ('{wahlperiode}') " + f"differs from this document's metadata: '{dokument.wp}'"
+        logger.warning(msg)
+        return False
+    return True
 
 
 class DownloadAndCacheDocuments(CachePipeline, StatsPipeline):
     """Pipeline that downloads and caches PDF documents for each Vorgang."""
 
-    # TODO(anyone): refactor to reduce complexity
-    async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:  # noqa: C901
+    async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:
         """Download and cache all document PDFs for the given Vorgang."""
-        if not isinstance(vorgang, GesetzVorgang):
-            msg = f"Expected {GesetzVorgang.__name__} object but got {vorgang.__class__.__name__}."
-            raise DropItem(msg)
-
-        if self.crawler.engine is None:
-            msg = "crawler.engine is None. The crawler seems improperly initialized."
-            raise ValueError(msg)
+        vorgang_guard(vorgang)
+        engine_guard(self.crawler)
 
         for dokument in vorgang.dokumente:
-            if dokument.wp != self.wahlperiode:
-                msg = (
-                    f"[{vorgang.id} - {dokument.id}]: Wahlperiode from scraping run ('{self.wahlperiode}') "
-                    + f"differs from this document's metadata: '{dokument.wp}'"
-                )
-                logger.warning(msg)
+            if not _is_in_current_wahlperiode(self.wahlperiode, vorgang, dokument):
                 continue
 
             for dokument_url in dokument.all_urls:
-                cache = self.get_cache(document=dokument, document_url=dokument_url)
-
-                if Key.DOCUMENT in cache:
-                    if await _reset_cache_if_file_got_modified(cache, dokument_url, engine=self.crawler.engine):
-                        self.increment_stats(DokumentCounter.CACHE_RESET)
-
-                    else:
-                        self.increment_stats(DokumentCounter.CACHE_HIT)
-                        continue
-                else:
-                    self.increment_stats(DokumentCounter.CACHE_MISS)
-
-                download_time = datetime.now(tz=UTC)
-                request = Request(dokument_url.encoded_string(), callback=NO_CALLBACK)
-                response = await self.crawler.engine.download_async(request)
-
-                if not isinstance(response, Response):
-                    self.increment_stats(DokumentCounter.DOWNLOAD_FAILED_INCORRECT_RESPONSE)
-                    msg = f"[{vorgang.id} - {dokument.id}]: Expected 'scrapy.Response' but got '{type(response)}'"
-                    logger.warning(msg)
-                    continue
-
-                if response.status != HTTPStatus.OK:
-                    self.increment_stats(DokumentCounter.DOWNLOAD_FAILED_INCORRECT_STATUS)
-                    msg = f"[{vorgang.id} - {dokument.id}]: Got {response.status} status code for URL: {response.url}"
-                    logger.warning(msg)
-                    continue
-
-                if last_modified_header_as_byte := response.headers.get("Last-Modified"):
-                    cache[Key.LAST_MODIFIED] = datetime.strptime(last_modified_header_as_byte.decode("utf-8"), LAST_MODIFIED_TIME_FORMAT).astimezone(UTC)
-
-                self.increment_stats(DokumentCounter.DOWNLOAD_DONE)
-                cache[Key.URL] = response.url
-                cache[Key.DOWNLOAD_TIME] = download_time
-                cache[Key.DOCUMENT] = response.body
+                await self._process_url(vorgang, dokument, dokument_url)
 
         return vorgang
+
+    async def _process_url(self, vorgang: GesetzVorgang, dokument: AnyGesetzDokument, dokument_url: HttpUrl) -> None:
+        """Process a single url for a given `vorgang` and `dokument`."""
+        cache = self.get_cache(dokument, dokument_url)
+
+        if await self._should_skip_cached_case(cache, dokument_url):
+            return
+
+        download = await self._download_valid_response(vorgang, dokument, dokument_url)
+
+        if download is None:
+            return
+
+        downloaded_at, response = download
+        self._store_download(cache, response, downloaded_at)
+
+    async def _should_skip_cached_case(self, cache: Cache, dokument_url: HttpUrl) -> bool:
+
+        if Key.DOCUMENT not in cache:
+            self.increment_stats(DokumentCounter.CACHE_MISS)
+            return False
+
+        reset = await _reset_cache_if_file_got_modified(cache, dokument_url, engine=self.crawler.engine)
+
+        if reset:
+            self.increment_stats(DokumentCounter.CACHE_RESET)
+            return False
+
+        self.increment_stats(DokumentCounter.CACHE_HIT)
+        return True
+
+    async def _download_valid_response(self, vorgang: GesetzVorgang, dokument: AnyGesetzDokument, dokument_url: HttpUrl) -> tuple[datetime, Response] | None:
+        downloaded_at, response = await download_document(dokument_url, self.crawler)
+
+        if not isinstance(response, Response):
+            self.increment_stats(DokumentCounter.DOWNLOAD_FAILED_INCORRECT_RESPONSE)
+            msg = f"[{vorgang.id} - {dokument.id}]: Expected 'scrapy.Response' but got '{type(response)}'"
+            logger.warning(msg)
+            return None
+
+        if response.status != HTTPStatus.OK:
+            self.increment_stats(DokumentCounter.DOWNLOAD_FAILED_INCORRECT_STATUS)
+            msg = f"[{vorgang.id} - {dokument.id}]: Got {response.status} status code for URL: {response.url}"
+            logger.warning(msg)
+            return None
+
+        return downloaded_at, response
+
+    def _store_download(self, cache: Cache, response: Response, downloaded_at: datetime) -> None:
+        if last_modified_header_as_byte := response.headers.get("Last-Modified"):
+            cache[Key.LAST_MODIFIED] = datetime.strptime(last_modified_header_as_byte.decode("utf-8"), LAST_MODIFIED_TIME_FORMAT).replace(tzinfo=UTC)
+
+        self.increment_stats(DokumentCounter.DOWNLOAD_DONE)
+        cache[Key.URL] = response.url
+        cache[Key.DOWNLOAD_TIME] = downloaded_at
+        cache[Key.DOCUMENT] = response.body
