@@ -21,6 +21,23 @@ logger = logging.getLogger(__name__)
 LAST_MODIFIED_TIME_FORMAT = "%a, %d %b %Y %H:%M:%S %Z"
 
 
+def _is_recheck_due(last_check_time: datetime | None, download_time: datetime) -> bool:
+    interval = timedelta(days=DOCUMENT_CHECK_MODIFIED_EVERY_DAYS)
+    check_due = last_check_time is None or (datetime.now(UTC) - last_check_time) >= interval
+    grace_period_done = (datetime.now(UTC) - download_time) >= interval
+    return check_due and grace_period_done
+
+
+async def _fetch_last_modified(dokument_url: HttpUrl, engine: ExecutionEngine) -> datetime | None:
+    request = Request(dokument_url.encoded_string(), method="HEAD", callback=NO_CALLBACK)
+    response = await engine.download_async(request)
+    header = response.headers.get("Last-Modified")
+    if not header:
+        return None
+
+    return datetime.strptime(header.decode("utf-8"), LAST_MODIFIED_TIME_FORMAT).astimezone(tz=UTC)
+
+
 async def _reset_cache_if_file_got_modified(cache: Cache, dokument_url: HttpUrl, engine: ExecutionEngine) -> bool:
     download_time = cache.get_timestamp(Key.DOWNLOAD_TIME)
     if not download_time:
@@ -37,23 +54,6 @@ async def _reset_cache_if_file_got_modified(cache: Cache, dokument_url: HttpUrl,
 
     cache.reset()
     return True
-
-
-def _is_recheck_due(last_check_time: datetime | None, download_time: datetime) -> bool:
-    interval = timedelta(days=DOCUMENT_CHECK_MODIFIED_EVERY_DAYS)
-    check_due = last_check_time is None or (datetime.now(UTC) - last_check_time) >= interval
-    grace_period_done = (datetime.now(UTC) - download_time) >= interval
-    return check_due and grace_period_done
-
-
-async def _fetch_last_modified(dokument_url: HttpUrl, engine: ExecutionEngine) -> datetime | None:
-    request = Request(dokument_url.encoded_string(), method="HEAD", callback=NO_CALLBACK)
-    response = await engine.download_async(request)
-    header = response.headers.get("Last-Modified")
-    if not header:
-        return None
-
-    return datetime.strptime(header.decode("utf-8"), LAST_MODIFIED_TIME_FORMAT).astimezone(tz=UTC)
 
 
 class DownloadAndCacheDocuments(CachePipeline, StatsPipeline):
