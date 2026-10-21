@@ -17,7 +17,7 @@ from scrapy.statscollectors import StatsCollector
 from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.constants import DOCUMENT_CHECK_MODIFIED_EVERY_DAYS
 from pazufa_scraper_be.pardok import GesetzVorgang
-from pazufa_scraper_be.pipelines.documents.download import (
+from pazufa_scraper_be.pipelines.documents.download_and_cache_documents import (
     LAST_MODIFIED_TIME_FORMAT,
     DownloadAndCacheDocuments,
     _fetch_last_modified,
