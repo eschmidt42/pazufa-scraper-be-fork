@@ -6,13 +6,13 @@ from typing import Self
 from pydantic import HttpUrl
 from scrapy import Request
 from scrapy.core.engine import ExecutionEngine
-from scrapy.exceptions import DropItem
 from scrapy.http import Response
 from scrapy.http.request import NO_CALLBACK
 
 from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.constants import DOCUMENT_CHECK_MODIFIED_EVERY_DAYS
 from pazufa_scraper_be.pardok import GesetzVorgang
+from pazufa_scraper_be.pipeline_guards import engine_guard, vorgang_guard
 from pazufa_scraper_be.pipelines._base import CachePipeline, StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
 
@@ -59,16 +59,10 @@ async def _fetch_last_modified(dokument_url: HttpUrl, engine: ExecutionEngine) -
 class DownloadAndCacheDocuments(CachePipeline, StatsPipeline):
     """Pipeline that downloads and caches PDF documents for each Vorgang."""
 
-    # TODO(anyone): refactor to reduce complexity
-    async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:  # noqa: C901
+    async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:
         """Download and cache all document PDFs for the given Vorgang."""
-        if not isinstance(vorgang, GesetzVorgang):
-            msg = f"Expected {GesetzVorgang.__name__} object but got {vorgang.__class__.__name__}."
-            raise DropItem(msg)
-
-        if self.crawler.engine is None:
-            msg = "crawler.engine is None. The crawler seems improperly initialized."
-            raise ValueError(msg)
+        vorgang_guard(vorgang)
+        engine_guard(self.crawler)
 
         for dokument in vorgang.dokumente:
             if dokument.wp != self.wahlperiode:
