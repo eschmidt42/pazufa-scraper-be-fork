@@ -35,10 +35,13 @@ async def _fetch_last_modified(dokument_url: HttpUrl, engine: ExecutionEngine) -
     if not header:
         return None
 
-    return datetime.strptime(header.decode("utf-8"), LAST_MODIFIED_TIME_FORMAT).astimezone(tz=UTC)
+    return datetime.strptime(header.decode("utf-8"), LAST_MODIFIED_TIME_FORMAT).replace(tzinfo=UTC)
 
 
 async def _reset_cache_if_file_got_modified(cache: Cache, dokument_url: HttpUrl, engine: ExecutionEngine) -> bool:
+    if not cache.has_entry(key=Key.DOWNLOAD_TIME):
+        return False
+
     download_time = cache.get_timestamp(Key.DOWNLOAD_TIME)
     if not download_time:
         return False
@@ -103,7 +106,7 @@ class DownloadAndCacheDocuments(CachePipeline, StatsPipeline):
                     continue
 
                 if last_modified_header_as_byte := response.headers.get("Last-Modified"):
-                    cache[Key.LAST_MODIFIED] = datetime.strptime(last_modified_header_as_byte.decode("utf-8"), LAST_MODIFIED_TIME_FORMAT).astimezone(UTC)
+                    cache[Key.LAST_MODIFIED] = datetime.strptime(last_modified_header_as_byte.decode("utf-8"), LAST_MODIFIED_TIME_FORMAT).replace(tzinfo=UTC)
 
                 self.increment_stats(DokumentCounter.DOWNLOAD_DONE)
                 cache[Key.URL] = response.url
