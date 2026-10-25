@@ -35,6 +35,16 @@ async def extract_text_with_ocr_backup(document_bytes: bytes) -> str:
     return text
 
 
+def _text_edits(text: str) -> str:
+    return (
+        text.strip()  # remove leading/trailing spaces
+        .replace("\x02", "")  # hyphens (line-breaks with -)
+        .replace("\x15", "")
+        .replace("\x16", "")
+        .replace("\x18", "")  # showed up when bold face Drucksache Nummer could not be extracted
+    )
+
+
 class ExtractTextFromPDF(CachePipeline, StatsPipeline):
     """Pipeline that extracts plain text from cached PDF documents using xberg."""
 
@@ -46,31 +56,26 @@ class ExtractTextFromPDF(CachePipeline, StatsPipeline):
             for dokument_url in dokument.all_urls:
                 cache = self.get_cache(document=dokument, document_url=dokument_url)
 
-                if Key.DOCUMENT in cache:
-                    if Key.TEXT in cache:
-                        self.increment_stats(TextCounter.CACHE_HIT)
-                        continue
+                if Key.DOCUMENT not in cache:
+                    continue
 
-                    self.increment_stats(TextCounter.CACHE_MISS)
-                    text = await extract_text_with_ocr_backup(document_bytes=cache.get_bytes(Key.DOCUMENT))
+                if Key.TEXT in cache:
+                    self.increment_stats(TextCounter.CACHE_HIT)
+                    continue
 
-                    # fmt: off
-                    # Some postprocessing that was necessary after eyeballing documents
-                    text = (
-                        text
-                        .strip()                                                      # remove leading/trailing spaces
-                        .replace("\x02", "")                                          # hyphens (line-breaks with -)
-                        .replace("\x15", "").replace("\x16", "").replace("\x18", "")  # showed up when bold face Drucksache Nummer could not be extracted
-                    )
-                    # fmt: on
+                self.increment_stats(TextCounter.CACHE_MISS)
 
-                    if len(text) == 0:
-                        self.increment_stats(TextCounter.EXTRACT_FAILED_EMPTY_TEXT)
-                        msg = f"[{vorgang.id} - {dokument.id}]: No text extracted."
-                        logger.warning(msg)
+                text = await extract_text_with_ocr_backup(document_bytes=cache.get_bytes(Key.DOCUMENT))
 
-                    else:
-                        self.increment_stats(TextCounter.EXTRACT_DONE)
-                        cache[Key.TEXT] = text
+                text = _text_edits(text)
+
+                if len(text) == 0:
+                    self.increment_stats(TextCounter.EXTRACT_FAILED_EMPTY_TEXT)
+                    msg = f"[{vorgang.id} - {dokument.id}]: No text extracted."
+                    logger.warning(msg)
+
+                else:
+                    self.increment_stats(TextCounter.EXTRACT_DONE)
+                    cache[Key.TEXT] = text
 
         return vorgang
