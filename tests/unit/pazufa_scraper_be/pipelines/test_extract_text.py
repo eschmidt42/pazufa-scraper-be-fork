@@ -15,7 +15,7 @@ from pazufa_scraper_be.cache import Key
 from pazufa_scraper_be.pardok import GesetzVorgang
 from pazufa_scraper_be.pipelines.documents.extract_text import (
     ExtractTextFromPDF,
-    _extract_text,
+    extract_text_with_ocr_backup,
 )
 from pazufa_scraper_be.pipelines.stats_counter import TextCounter
 
@@ -43,7 +43,7 @@ def test_extract_text_joins_pages_without_retrying_ocr() -> None:
     with patch("pazufa_scraper_be.pipelines.documents.extract_text.xberg.extract", new_callable=AsyncMock) as extract:
         extract.return_value = _extraction_result("First page", "Second page")
 
-        text = asyncio.run(_extract_text(b"pdf bytes", ocr=False))
+        text = asyncio.run(extract_text_with_ocr_backup(b"pdf bytes"))
 
     assert text == "First page\nSecond page"
     assert extract.await_count == 1
@@ -58,23 +58,12 @@ def test_extract_text_retries_with_ocr_only_when_text_is_empty() -> None:
     with patch("pazufa_scraper_be.pipelines.documents.extract_text.xberg.extract", new_callable=AsyncMock) as extract:
         extract.side_effect = [_extraction_result(), _extraction_result("OCR text")]
 
-        text = asyncio.run(_extract_text(b"pdf bytes", ocr=False))
+        text = asyncio.run(extract_text_with_ocr_backup(b"pdf bytes"))
 
     assert text == "OCR text"
     assert extract.await_count == 2
     assert extract.await_args_list[0].kwargs["config"].force_ocr is False
     assert extract.await_args_list[1].kwargs["config"].force_ocr is True
-
-
-def test_extract_text_does_not_retry_ocr_when_already_in_ocr_mode() -> None:
-    """A failed OCR extraction does not recurse indefinitely."""
-    with patch("pazufa_scraper_be.pipelines.documents.extract_text.xberg.extract", new_callable=AsyncMock) as extract:
-        extract.return_value = _extraction_result()
-
-        text = asyncio.run(_extract_text(b"pdf bytes", ocr=True))
-
-    assert text == ""
-    extract.assert_awaited_once()
 
 
 def test_extract_pipeline_normalizes_and_caches_text(
@@ -88,7 +77,7 @@ def test_extract_pipeline_normalizes_and_caches_text(
     cache[Key.DOCUMENT] = b"pdf bytes"
 
     with patch(
-        "pazufa_scraper_be.pipelines.documents.extract_text._extract_text",
+        "pazufa_scraper_be.pipelines.documents.extract_text.extract_text_with_ocr_backup",
         new_callable=AsyncMock,
         return_value=" \x02A\x15B\x16C\x18 ",
     ) as extract:
@@ -96,7 +85,7 @@ def test_extract_pipeline_normalizes_and_caches_text(
 
     assert result is extract_item
     assert cache[Key.TEXT] == "ABC"
-    extract.assert_awaited_once_with(document_bytes=b"pdf bytes", ocr=False)
+    extract.assert_awaited_once_with(document_bytes=b"pdf bytes")
     assert extract_pipeline.stats.get_value(TextCounter.CACHE_MISS.value) == 1
     assert extract_pipeline.stats.get_value(TextCounter.EXTRACT_DONE.value) == 1
 

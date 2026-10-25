@@ -14,18 +14,23 @@ from pazufa_scraper_be.xberg_config import get_xberg_config
 logger = logging.getLogger(__name__)
 
 
-async def _extract_text(document_bytes: bytes, *, ocr: bool) -> str:
-    extract_input = ExtractInput(kind=ExtractInputKind.BYTES, bytes=document_bytes)  # ty: ignore[invalid-argument-type] NOTE: This is actually fine and should be a temporary bug
+async def _extract_text(extract_input: ExtractInput, *, ocr: bool) -> str:
     extraction_result = await xberg.extract(
         input=extract_input,
         config=get_xberg_config(ocr=ocr),
     )
     extraction_result = extraction_result.results[0]
-    text = "\n".join([page.content for page in extraction_result.pages or []])
+    return "\n".join([page.content for page in extraction_result.pages or []])
 
-    # In the few cases, where we could not extract text, apply OCR
-    if len(text) == 0 and not ocr:
-        return await _extract_text(document_bytes=document_bytes, ocr=True)
+
+async def extract_text_with_ocr_backup(document_bytes: bytes) -> str:
+    """Optionally extract text using OCR."""
+    extract_input = ExtractInput(kind=ExtractInputKind.BYTES, bytes=document_bytes)  # ty: ignore[invalid-argument-type] NOTE: This is actually fine and should be a temporary bug
+
+    text = await _extract_text(extract_input, ocr=False)
+
+    if len(text) == 0:
+        text = await _extract_text(extract_input, ocr=True)
 
     return text
 
@@ -49,7 +54,7 @@ class ExtractTextFromPDF(CachePipeline, StatsPipeline):
                         continue
 
                     self.increment_stats(TextCounter.CACHE_MISS)
-                    text = await _extract_text(document_bytes=cache.get_bytes(Key.DOCUMENT), ocr=False)
+                    text = await extract_text_with_ocr_backup(document_bytes=cache.get_bytes(Key.DOCUMENT))
 
                     # fmt: off
                     # Some postprocessing that was necessary after eyeballing documents
