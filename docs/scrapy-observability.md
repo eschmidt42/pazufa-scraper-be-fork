@@ -56,7 +56,7 @@ PaZuFa/Vorgang/
 
 ### Dokument
 
-*Emitted by `DownloadAndCacheDocuments`.*
+*Emitted by `DownloadDocuments`.*
 
 One count per document URL processed.
 

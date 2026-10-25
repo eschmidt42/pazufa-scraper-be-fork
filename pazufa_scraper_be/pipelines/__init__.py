@@ -1,6 +1,6 @@
 from .build_vorgang.build_vorgang import BuildPaZuFaVorgang
 from .documents import (
-    DownloadAndCacheDocuments,
+    DownloadDocuments,
     ExtractTextFromPDF,
     PrepareDocumentUrls,
     SummarizeExtractedPDFText,
@@ -10,7 +10,7 @@ from .submit import SubmitVorgang
 
 __all__ = [
     "BuildPaZuFaVorgang",
-    "DownloadAndCacheDocuments",
+    "DownloadDocuments",
     "ExtractTextFromPDF",
     "HandleErrors",
     "PrepareDocumentUrls",

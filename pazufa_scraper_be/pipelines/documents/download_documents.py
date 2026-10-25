@@ -78,7 +78,7 @@ def _is_in_current_wahlperiode(wahlperiode: int, vorgang: GesetzVorgang, dokumen
     return True
 
 
-class DownloadAndCacheDocuments(CachePipeline, StatsPipeline):
+class DownloadDocuments(CachePipeline, StatsPipeline):
     """Pipeline that downloads and caches PDF documents for each Vorgang."""
 
     async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:

@@ -17,9 +17,9 @@ from scrapy.statscollectors import StatsCollector
 from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.constants import DOCUMENT_CHECK_MODIFIED_EVERY_DAYS
 from pazufa_scraper_be.pardok import GesetzVorgang
-from pazufa_scraper_be.pipelines.documents.download_and_cache_documents import (
+from pazufa_scraper_be.pipelines.documents.download_documents import (
     LAST_MODIFIED_TIME_FORMAT,
-    DownloadAndCacheDocuments,
+    DownloadDocuments,
     _fetch_last_modified,
     _is_recheck_due,
     _reset_cache_if_file_got_modified,
@@ -39,12 +39,12 @@ def download_engine() -> MagicMock:
 
 
 @pytest.fixture
-def download_pipeline(tmp_path: Path, download_engine: MagicMock) -> DownloadAndCacheDocuments:
+def download_pipeline(tmp_path: Path, download_engine: MagicMock) -> DownloadDocuments:
     """Create a download pipeline with a temporary cache and mocked engine."""
     crawler = Crawler(Spider, Settings({"WAHLPERIODE": 19, "CACHE_DIR": tmp_path}))
     crawler.stats = StatsCollector(crawler)
     crawler.engine = download_engine
-    return DownloadAndCacheDocuments(crawler)
+    return DownloadDocuments(crawler)
 
 
 @pytest.fixture
@@ -53,7 +53,7 @@ def download_item(base_vorgang_data: dict[str, Any], plpr_data: dict[str, Any]) 
     return GesetzVorgang.model_validate({**base_vorgang_data, "Dokument": [{**plpr_data, "LokURL": str(DOCUMENT_URL)}]})
 
 
-def _item_cache(pipeline: DownloadAndCacheDocuments, item: GesetzVorgang) -> Cache:
+def _item_cache(pipeline: DownloadDocuments, item: GesetzVorgang) -> Cache:
     document = item.dokumente[0]
     assert document.lok_url is not None
     return pipeline.get_cache(document=document, document_url=document.lok_url)
@@ -132,7 +132,7 @@ def test_reset_cache_if_file_got_modified_records_check_without_last_modified(tm
 
 def test_download_and_cache_stores_document_and_metadata(
     download_item: GesetzVorgang,
-    download_pipeline: DownloadAndCacheDocuments,
+    download_pipeline: DownloadDocuments,
     download_engine: MagicMock,
 ) -> None:
     """A successful cache miss stores document bytes, URL, timestamps, and stats."""
@@ -163,7 +163,7 @@ def test_download_and_cache_stores_document_and_metadata(
 
 def test_download_and_cache_skips_cached_document(
     download_item: GesetzVorgang,
-    download_pipeline: DownloadAndCacheDocuments,
+    download_pipeline: DownloadDocuments,
     download_engine: MagicMock,
 ) -> None:
     """A cached document whose recheck is not due counts as a cache hit."""
@@ -180,7 +180,7 @@ def test_download_and_cache_skips_cached_document(
 
 def test_download_and_cache_redownloads_modified_document(
     download_item: GesetzVorgang,
-    download_pipeline: DownloadAndCacheDocuments,
+    download_pipeline: DownloadDocuments,
     download_engine: MagicMock,
 ) -> None:
     """A changed Last-Modified header resets the old cache and downloads fresh bytes."""
@@ -206,7 +206,7 @@ def test_download_and_cache_redownloads_modified_document(
 def test_download_and_cache_skips_document_from_another_wahlperiode(
     base_vorgang_data: dict,
     plpr_data: dict,
-    download_pipeline: DownloadAndCacheDocuments,
+    download_pipeline: DownloadDocuments,
     download_engine: MagicMock,
 ) -> None:
     """Documents from another Wahlperiode are not cached or downloaded."""
@@ -220,7 +220,7 @@ def test_download_and_cache_skips_document_from_another_wahlperiode(
 
 def test_download_and_cache_counts_incorrect_response(
     download_item: GesetzVorgang,
-    download_pipeline: DownloadAndCacheDocuments,
+    download_pipeline: DownloadDocuments,
     download_engine: MagicMock,
 ) -> None:
     """A non-Response download result is counted and not cached."""
@@ -234,7 +234,7 @@ def test_download_and_cache_counts_incorrect_response(
 
 def test_download_and_cache_counts_incorrect_status(
     download_item: GesetzVorgang,
-    download_pipeline: DownloadAndCacheDocuments,
+    download_pipeline: DownloadDocuments,
     download_engine: MagicMock,
 ) -> None:
     """A non-200 download response is counted and not cached."""
