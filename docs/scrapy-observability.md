@@ -81,7 +81,7 @@ PaZuFa/Dokument/
 
 ### Text
 
-*Emitted by `ExtractTextFromPDF`.*
+*Emitted by `ExtractText`.*
 
 One count per document URL processed.
 
