@@ -46,7 +46,7 @@ def _text_edits(text: str) -> str:
     )
 
 
-class ExtractTextFromPDF(CachePipeline, StatsPipeline):
+class ExtractText(CachePipeline, StatsPipeline):
     """Pipeline that extracts plain text from cached PDF documents using xberg."""
 
     async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:

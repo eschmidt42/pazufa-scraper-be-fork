@@ -14,18 +14,18 @@ from scrapy.statscollectors import StatsCollector
 from pazufa_scraper_be.cache import Key
 from pazufa_scraper_be.pardok import GesetzVorgang
 from pazufa_scraper_be.pipelines.documents.extract_text import (
-    ExtractTextFromPDF,
+    ExtractText,
     extract_text_with_ocr_backup,
 )
 from pazufa_scraper_be.pipelines.stats_counter import TextCounter
 
 
 @pytest.fixture
-def extract_pipeline(tmp_path: Path) -> ExtractTextFromPDF:
+def extract_pipeline(tmp_path: Path) -> ExtractText:
     """Create an extraction pipeline with a temporary cache and Scrapy stats."""
     crawler = Crawler(Spider, Settings({"WAHLPERIODE": 19, "CACHE_DIR": tmp_path}))
     crawler.stats = StatsCollector(crawler)
-    return ExtractTextFromPDF(crawler)
+    return ExtractText(crawler)
 
 
 @pytest.fixture
@@ -68,7 +68,7 @@ def test_extract_text_retries_with_ocr_only_when_text_is_empty() -> None:
 
 def test_extract_pipeline_normalizes_and_caches_text(
     extract_item: GesetzVorgang,
-    extract_pipeline: ExtractTextFromPDF,
+    extract_pipeline: ExtractText,
 ) -> None:
     """A cache miss extracts text, removes known control characters, and records stats."""
     document = extract_item.dokumente[0]
@@ -92,7 +92,7 @@ def test_extract_pipeline_normalizes_and_caches_text(
 
 def test_extract_pipeline_skips_cached_text(
     extract_item: GesetzVorgang,
-    extract_pipeline: ExtractTextFromPDF,
+    extract_pipeline: ExtractText,
 ) -> None:
     """A document with cached text is counted as a hit without re-extraction."""
     document = extract_item.dokumente[0]
@@ -110,7 +110,7 @@ def test_extract_pipeline_skips_cached_text(
 
 def test_extract_pipeline_counts_and_logs_empty_text(
     extract_item: GesetzVorgang,
-    extract_pipeline: ExtractTextFromPDF,
+    extract_pipeline: ExtractText,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Empty output is logged and counted without adding a text cache entry."""
@@ -131,7 +131,7 @@ def test_extract_pipeline_counts_and_logs_empty_text(
     assert f"[{extract_item.id} - {document.id}]: No text extracted." in caplog.text
 
 
-def test_extract_pipeline_rejects_non_vorgang(extract_pipeline: ExtractTextFromPDF) -> None:
+def test_extract_pipeline_rejects_non_vorgang(extract_pipeline: ExtractText) -> None:
     """Items of an unexpected type are dropped."""
     invalid_item: Any = object()
     with pytest.raises(DropItem, match="Expected GesetzVorgang object"):
