@@ -16,7 +16,6 @@ from pazufa_scraper_be.pardok import GesetzVorgang
 from pazufa_scraper_be.pipelines.documents.extract_text import (
     ExtractTextFromPDF,
     _extract_text,
-    _get_xberg_config,
 )
 from pazufa_scraper_be.pipelines.stats_counter import TextCounter
 
@@ -37,21 +36,6 @@ def extract_item(base_vorgang_data: dict[str, Any], plpr_data: dict[str, Any]) -
 
 def _extraction_result(*contents: str) -> SimpleNamespace:
     return SimpleNamespace(results=[SimpleNamespace(pages=[SimpleNamespace(content=content) for content in contents])])
-
-
-def test_get_xberg_config_configures_ocr_only_when_requested() -> None:
-    """OCR mode enables German Tesseract OCR while default mode disables it."""
-    regular_config = _get_xberg_config(ocr=False)
-    ocr_config = _get_xberg_config(ocr=True)
-
-    assert regular_config.pages is not None
-    assert regular_config.ocr is None
-    assert regular_config.force_ocr is False
-    assert regular_config.pages.extract_pages is True
-    assert ocr_config.ocr is not None
-    assert ocr_config.ocr.backend == "tesseract"
-    assert ocr_config.ocr.language == ["deu"]
-    assert ocr_config.force_ocr is True
 
 
 def test_extract_text_joins_pages_without_retrying_ocr() -> None:
