@@ -2,11 +2,11 @@ import logging
 from typing import Self
 
 import xberg
-from scrapy.exceptions import DropItem
 from xberg import ExtractInput, ExtractInputKind
 
 from pazufa_scraper_be.cache import Key
 from pazufa_scraper_be.pardok import GesetzVorgang
+from pazufa_scraper_be.pipeline_guards import vorgang_guard
 from pazufa_scraper_be.pipelines._base import CachePipeline, StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import TextCounter
 from pazufa_scraper_be.xberg_config import get_xberg_config
@@ -40,9 +40,7 @@ class ExtractTextFromPDF(CachePipeline, StatsPipeline):
 
     async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:
         """Extract text from cached PDFs for each document in the Vorgang."""
-        if not isinstance(vorgang, GesetzVorgang):
-            msg = f"Expected {GesetzVorgang.__name__} object but got {vorgang.__class__.__name__}."
-            raise DropItem(msg)
+        vorgang_guard(vorgang)
 
         for dokument in vorgang.dokumente:
             for dokument_url in dokument.all_urls:
