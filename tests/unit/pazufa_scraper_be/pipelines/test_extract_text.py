@@ -66,6 +66,35 @@ def test_extract_text_retries_with_ocr_only_when_text_is_empty() -> None:
     assert extract.await_args_list[1].kwargs["config"].force_ocr is True
 
 
+def test_extract_text_treats_missing_pages_as_empty_text() -> None:
+    """A result without pages is treated as empty and triggers the OCR retry."""
+    no_pages = SimpleNamespace(results=[SimpleNamespace(pages=None)])
+    with patch("pazufa_scraper_be.pipelines.documents.extract_text.xberg.extract", new_callable=AsyncMock) as extract:
+        extract.side_effect = [no_pages, _extraction_result("OCR text")]
+
+        text = asyncio.run(extract_text_with_ocr_backup(b"pdf bytes"))
+
+    assert text == "OCR text"
+    assert extract.await_count == 2
+    assert extract.await_args_list[0].kwargs["config"].force_ocr is False
+    assert extract.await_args_list[1].kwargs["config"].force_ocr is True
+
+
+def test_extract_text_propagates_extraction_errors() -> None:
+    """An extraction error is propagated without retrying with OCR."""
+    with (
+        patch(
+            "pazufa_scraper_be.pipelines.documents.extract_text.xberg.extract",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("extraction failed"),
+        ) as extract,
+        pytest.raises(RuntimeError, match="extraction failed"),
+    ):
+        asyncio.run(extract_text_with_ocr_backup(b"pdf bytes"))
+
+    extract.assert_awaited_once()
+
+
 def test_extract_pipeline_normalizes_and_caches_text(
     extract_item: GesetzVorgang,
     extract_pipeline: ExtractText,
@@ -106,6 +135,24 @@ def test_extract_pipeline_skips_cached_text(
 
     extract.assert_not_awaited()
     assert extract_pipeline.stats.get_value(TextCounter.CACHE_HIT.value) == 1
+
+
+def test_extract_pipeline_skips_documents_missing_from_cache(
+    extract_item: GesetzVorgang,
+    extract_pipeline: ExtractText,
+) -> None:
+    """A document without cached bytes is ignored without attempting extraction."""
+    document = extract_item.dokumente[0]
+    assert document.lok_url is not None
+
+    with patch(
+        "pazufa_scraper_be.pipelines.documents.extract_text.extract_text_with_ocr_backup",
+        new_callable=AsyncMock,
+    ) as extract:
+        asyncio.run(extract_pipeline.process_item(extract_item))
+
+    extract.assert_not_awaited()
+    assert extract_pipeline.stats.get_value(TextCounter.CACHE_MISS.value) is None
 
 
 def test_extract_pipeline_counts_and_logs_empty_text(
