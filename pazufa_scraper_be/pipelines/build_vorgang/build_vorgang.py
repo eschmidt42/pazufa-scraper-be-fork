@@ -13,6 +13,7 @@ from scrapy.exceptions import DropItem
 
 from pazufa_scraper_be.constants import ANGENOMMEN, VERTAGT
 from pazufa_scraper_be.pardok import APrDokument, DokTyp, DrsDokument, GesetzVorgang, GVBlDokument, PlPrDokument
+from pazufa_scraper_be.pipeline_guards import vorgang_guard
 from pazufa_scraper_be.pipelines._base import CachePipeline, StatsPipeline
 from pazufa_scraper_be.pipelines.build_vorgang import build_pazufa_dokument
 from pazufa_scraper_be.pipelines.build_vorgang.rules import (
@@ -122,9 +123,7 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
     # TODO(se-jaeger): refactor to reduce complexity
     async def process_item(self: Self, vorgang: GesetzVorgang) -> PaZuFaVorgang:  # noqa: C901
         """Build and return a PaZuFa Vorgang from a parsed GesetzVorgang."""
-        if not isinstance(vorgang, GesetzVorgang):
-            msg = f"Expected {GesetzVorgang.__name__} object but got {vorgang.__class__.__name__}."
-            raise DropItem(msg)
+        vorgang_guard(vorgang)
 
         if len(vorgang.dokumente) == 1 and isinstance(vorgang.dokumente[0], GVBlDokument):
             self.increment_stats(VorgangCounter.DROP_OUT_OF_SCOPE)
