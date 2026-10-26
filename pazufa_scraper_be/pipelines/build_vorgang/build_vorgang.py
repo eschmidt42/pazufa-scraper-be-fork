@@ -130,32 +130,7 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
 
         self._empty_dok_containers_guard(vorgang, dok_containers)
 
-        stationen: list[Station] = []
-        for dok_container in dok_containers:
-            station_typ, (gremium, gremium_federf) = get_station_typ_and_gremium(dok_container)
-            zp_start, zp_modifiziert = get_station_zeitpunkte(dok_container)
-
-            station = Station(
-                api_id=uuid.uuid5(self.crawler.settings.get("SCRAPER_UUID"), f"Station-{dok_container.pardok.id}"),
-                zp_start=zp_start,
-                zp_modifiziert=zp_modifiziert,
-                gremium=gremium,
-                typ=station_typ,
-                dokumente=cast("list[Dokument | UUID]", dok_container.pazufa),
-                titel=dok_container.pardok.typ_l or UNSET,
-                gremium_federf=gremium_federf,
-                # NOTE: Following should be revisited
-                link=UNSET,
-                additional_links=UNSET,
-                stellungnahmen=UNSET,
-            )
-            stationen.append(station)
-
-            if dok_container.pardok.abstract is not None and (
-                new_station := check_and_create_vote_outcome_station(station=station, dok_abstract=dok_container.pardok.abstract)
-            ):
-                new_station.api_id = uuid.uuid5(self.crawler.settings.get("SCRAPER_UUID"), f"Station-{dok_container.pardok.id}-{new_station.typ}")
-                stationen.append(new_station)
+        stationen = self._build_stationen(dok_containers)
 
         dokument = stationen[0].dokumente[0]
         if isinstance(dokument, Dokument):
@@ -185,6 +160,48 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
             kurztitel=UNSET,
             lobbyregister=UNSET,
         )
+
+    def _build_stationen(self, dok_containers: list[DokumentContainer]) -> list[Station]:
+
+        stationen: list[Station] = []
+        for dok_container in dok_containers:
+            station_typ, (gremium, gremium_federf) = get_station_typ_and_gremium(dok_container)
+
+            zp_start, zp_modifiziert = get_station_zeitpunkte(dok_container)
+
+            api_id = uuid.uuid5(self.crawler.settings.get("SCRAPER_UUID"), f"Station-{dok_container.pardok.id}")
+
+            dokumente = cast("list[Dokument | UUID]", dok_container.pazufa)
+
+            station = Station(
+                api_id=api_id,
+                zp_start=zp_start,
+                zp_modifiziert=zp_modifiziert,
+                gremium=gremium,
+                typ=station_typ,
+                dokumente=dokumente,
+                titel=dok_container.pardok.typ_l or UNSET,
+                gremium_federf=gremium_federf,
+                # NOTE: Following should be revisited
+                link=UNSET,
+                additional_links=UNSET,
+                stellungnahmen=UNSET,
+            )
+            stationen.append(station)
+
+            abstract = dok_container.pardok.abstract
+
+            if abstract is None:
+                continue
+
+            new_station = check_and_create_vote_outcome_station(station=station, dok_abstract=abstract)
+
+            if new_station:
+                new_station.api_id = uuid.uuid5(self.crawler.settings.get("SCRAPER_UUID"), f"Station-{dok_container.pardok.id}-{new_station.typ}")
+
+                stationen.append(new_station)
+
+        return stationen
 
     def _build_dok_containers(self, vorgang: GesetzVorgang) -> list[DokumentContainer]:
 
