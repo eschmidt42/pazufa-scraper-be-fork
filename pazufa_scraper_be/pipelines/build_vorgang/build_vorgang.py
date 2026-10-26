@@ -121,14 +121,10 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
     """Pipeline that converts a GesetzVorgang into a PaZuFa Vorgang API model."""
 
     # TODO(se-jaeger): refactor to reduce complexity
-    async def process_item(self: Self, vorgang: GesetzVorgang) -> PaZuFaVorgang:  # noqa: C901
+    async def process_item(self: Self, vorgang: GesetzVorgang) -> PaZuFaVorgang:
         """Build and return a PaZuFa Vorgang from a parsed GesetzVorgang."""
         vorgang_guard(vorgang)
-
-        if len(vorgang.dokumente) == 1 and isinstance(vorgang.dokumente[0], GVBlDokument):
-            self.increment_stats(VorgangCounter.DROP_OUT_OF_SCOPE)
-            msg = f"[{vorgang.id}]: Out of scope. Single Gesetz- und Verordnungsblatt."
-            raise DropItem(msg, log_level="INFO")
+        self._gvbl_guard(vorgang)
 
         dok_containers = []
         for pardok in vorgang.dokumente:
@@ -211,3 +207,9 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
             kurztitel=UNSET,
             lobbyregister=UNSET,
         )
+
+    def _gvbl_guard(self, vorgang: GesetzVorgang) -> None:
+        if len(vorgang.dokumente) == 1 and isinstance(vorgang.dokumente[0], GVBlDokument):
+            self.increment_stats(VorgangCounter.DROP_OUT_OF_SCOPE)
+            msg = f"[{vorgang.id}]: Out of scope. Single Gesetz- und Verordnungsblatt."
+            raise DropItem(msg, log_level="INFO")
