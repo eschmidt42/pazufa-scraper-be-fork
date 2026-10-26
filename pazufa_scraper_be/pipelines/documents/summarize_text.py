@@ -2,9 +2,10 @@ import logging
 from typing import Self
 
 from pazufa_corelib.llm import LLMProviderError
+from pydantic import HttpUrl
 
 from pazufa_scraper_be.cache import Cache, Key
-from pazufa_scraper_be.pardok import BaseGesetzDokument, DrsDokument, GesetzVorgang, GVBlDokument
+from pazufa_scraper_be.pardok import AnyGesetzDokument, BaseGesetzDokument, DrsDokument, GesetzVorgang, GVBlDokument
 from pazufa_scraper_be.pardok.dokument import Protokoll
 from pazufa_scraper_be.pipeline_guards import vorgang_guard
 from pazufa_scraper_be.pipelines._base import CachePipeline, LLMPipeline, StatsPipeline
@@ -63,47 +64,50 @@ class SummarizeText(CachePipeline, LLMPipeline, StatsPipeline):
 
         for dokument in vorgang.dokumente:
             for dokument_url in dokument.all_urls:
-                cache = self.get_cache(document=dokument, document_url=dokument_url)
-
-                if Key.SUMMARY_IGNORE in cache:
-                    self.increment_stats(SummaryCounter.IGNORE)
-                    continue
-
-                # There is no text to summarize => skip
-                if Key.TEXT not in cache:
-                    continue
-
-                # If model specific summary exist => link and skip
-                if self.llm_model_name is not None and cache.exist_model_specific_summary(self.llm_model_name):
-                    self.increment_stats(SummaryCounter.CACHE_HIT)
-                    cache.link_model_specific_summary_file(llm_model_name=self.llm_model_name)
-                    continue
-
-                self.increment_stats(SummaryCounter.CACHE_MISS)
-                try:
-                    summary = await self.summarize(dokument=dokument, cache=cache)
-
-                except LLMProviderError as error:
-                    self.increment_stats(LLMCounter.SUMMARIZE_FAILED_PROVIDER)
-                    msg = f"[{vorgang.id} - {dokument.id}]: LLM summarization failed due to provider problem."
-                    logger.warning(msg)
-
-                    cache[Key.SUMMARY_IGNORE] = repr(error)
-                    continue
-
-                if summary is None:
-                    self.increment_stats(LLMCounter.SUMMARIZE_FAILED_APPLICATION)
-                    msg = f"[{vorgang.id} - {dokument.id}]: LLM summarization failed due to application problem."
-                    logger.warning(msg)
-
-                elif len(summary) == 0:
-                    self.increment_stats(LLMCounter.SUMMARIZE_FAILED_EMPTY_SUMMARY)
-                    msg = f"[{vorgang.id} - {dokument.id}]: Summary is empty."
-                    logger.warning(msg)
-
-                else:
-                    self.increment_stats(LLMCounter.SUMMARIZE_DONE)
-                    cache.set_model_specific_summary(llm_model_name=self.llm_model_name, summary=summary)
-                    cache.link_model_specific_summary_file(llm_model_name=self.llm_model_name)
+                await self._process_url(vorgang, dokument, dokument_url)
 
         return vorgang
+
+    async def _process_url(self, vorgang: GesetzVorgang, dokument: AnyGesetzDokument, dokument_url: HttpUrl) -> None:
+        cache = self.get_cache(document=dokument, document_url=dokument_url)
+
+        if Key.SUMMARY_IGNORE in cache:
+            self.increment_stats(SummaryCounter.IGNORE)
+            return
+
+        # There is no text to summarize => skip
+        if Key.TEXT not in cache:
+            return
+
+        # If model specific summary exist => link and skip
+        if self.llm_model_name is not None and cache.exist_model_specific_summary(self.llm_model_name):
+            self.increment_stats(SummaryCounter.CACHE_HIT)
+            cache.link_model_specific_summary_file(llm_model_name=self.llm_model_name)
+            return
+
+        self.increment_stats(SummaryCounter.CACHE_MISS)
+        try:
+            summary = await self.summarize(dokument=dokument, cache=cache)
+
+        except LLMProviderError as error:
+            self.increment_stats(LLMCounter.SUMMARIZE_FAILED_PROVIDER)
+            msg = f"[{vorgang.id} - {dokument.id}]: LLM summarization failed due to provider problem."
+            logger.warning(msg)
+
+            cache[Key.SUMMARY_IGNORE] = repr(error)
+            return
+
+        if summary is None:
+            self.increment_stats(LLMCounter.SUMMARIZE_FAILED_APPLICATION)
+            msg = f"[{vorgang.id} - {dokument.id}]: LLM summarization failed due to application problem."
+            logger.warning(msg)
+
+        elif len(summary) == 0:
+            self.increment_stats(LLMCounter.SUMMARIZE_FAILED_EMPTY_SUMMARY)
+            msg = f"[{vorgang.id} - {dokument.id}]: Summary is empty."
+            logger.warning(msg)
+
+        else:
+            self.increment_stats(LLMCounter.SUMMARIZE_DONE)
+            cache.set_model_specific_summary(llm_model_name=self.llm_model_name, summary=summary)
+            cache.link_model_specific_summary_file(llm_model_name=self.llm_model_name)
