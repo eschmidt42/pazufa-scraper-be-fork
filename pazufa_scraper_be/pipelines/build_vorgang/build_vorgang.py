@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from typing import Self, cast
+from typing import TYPE_CHECKING, Self, cast
 from uuid import UUID
 
 from pazufa_corelib.api_client.models import Dokument, Ressort, Sachgebiet, Station, VgIdent, Vorgang, Vorgangstyp
@@ -13,6 +13,7 @@ from scrapy.exceptions import DropItem
 
 from pazufa_scraper_be.constants import ANGENOMMEN, VERTAGT
 from pazufa_scraper_be.pardok import APrDokument, DokTyp, DrsDokument, GesetzVorgang, GVBlDokument, PlPrDokument
+from pazufa_scraper_be.pipeline_guards import vorgang_guard
 from pazufa_scraper_be.pipelines._base import CachePipeline, StatsPipeline
 from pazufa_scraper_be.pipelines.build_vorgang import build_pazufa_dokument
 from pazufa_scraper_be.pipelines.build_vorgang.rules import (
@@ -34,6 +35,9 @@ from pazufa_scraper_be.pipelines.build_vorgang.utils import (
     uniqify,
 )
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
+
+if TYPE_CHECKING:
+    from scrapy.settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -116,73 +120,23 @@ def _get_ressort() -> Ressort | Unset | None:
     return UNSET
 
 
+def _create_api_id(settings: Settings, station_name: str) -> UUID:
+    return uuid.uuid5(settings.get("SCRAPER_UUID"), station_name)
+
+
 class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
     """Pipeline that converts a GesetzVorgang into a PaZuFa Vorgang API model."""
 
-    # TODO(se-jaeger): refactor to reduce complexity
-    async def process_item(self: Self, vorgang: GesetzVorgang) -> PaZuFaVorgang:  # noqa: C901
+    async def process_item(self: Self, vorgang: GesetzVorgang) -> PaZuFaVorgang:
         """Build and return a PaZuFa Vorgang from a parsed GesetzVorgang."""
-        if not isinstance(vorgang, GesetzVorgang):
-            msg = f"Expected {GesetzVorgang.__name__} object but got {vorgang.__class__.__name__}."
-            raise DropItem(msg)
+        vorgang_guard(vorgang)
+        self._gvbl_guard(vorgang)
 
-        if len(vorgang.dokumente) == 1 and isinstance(vorgang.dokumente[0], GVBlDokument):
-            self.increment_stats(VorgangCounter.DROP_OUT_OF_SCOPE)
-            msg = f"[{vorgang.id}]: Out of scope. Single Gesetz- und Verordnungsblatt."
-            raise DropItem(msg, log_level="INFO")
+        dok_containers = self._build_dok_containers(vorgang)
 
-        dok_containers = []
-        for pardok in vorgang.dokumente:
-            pazufa = []
-            for dokument_url in pardok.all_urls:
-                cache = self.get_cache(document=pardok, document_url=dokument_url)
+        self._empty_dok_containers_guard(vorgang, dok_containers)
 
-                pazufa_dokument = build_pazufa_dokument(dokument=pardok, cache=cache, url=dokument_url)
-
-                if pazufa_dokument:
-                    pazufa.append(pazufa_dokument)
-
-            if len(pazufa) > 0:
-                dok_containers.append(DokumentContainer(pardok, pazufa))
-
-        if len(dok_containers) == 0:
-            self.increment_stats(VorgangCounter.DROP_NO_DOCUMENTS)
-            msg = f"[{vorgang.id}]: Could not create any Dokument from Vorgang."
-            raise DropItem(msg)
-
-        dok_containers = apply_rules(pardok_pazufa_doks=dok_containers, rules=RULES)
-
-        if len(dok_containers) == 0:
-            self.increment_stats(VorgangCounter.DROP_NO_STATIONS)
-            msg = f"[{vorgang.id}]: Could not create any Stations."
-            raise DropItem(msg)
-
-        stationen: list[Station] = []
-        for dok_container in dok_containers:
-            station_typ, (gremium, gremium_federf) = get_station_typ_and_gremium(dok_container)
-            zp_start, zp_modifiziert = get_station_zeitpunkte(dok_container)
-
-            station = Station(
-                api_id=uuid.uuid5(self.crawler.settings.get("SCRAPER_UUID"), f"Station-{dok_container.pardok.id}"),
-                zp_start=zp_start,
-                zp_modifiziert=zp_modifiziert,
-                gremium=gremium,
-                typ=station_typ,
-                dokumente=cast("list[Dokument | UUID]", dok_container.pazufa),
-                titel=dok_container.pardok.typ_l or UNSET,
-                gremium_federf=gremium_federf,
-                # NOTE: Following should be revisited
-                link=UNSET,
-                additional_links=UNSET,
-                stellungnahmen=UNSET,
-            )
-            stationen.append(station)
-
-            if dok_container.pardok.abstract is not None and (
-                new_station := check_and_create_vote_outcome_station(station=station, dok_abstract=dok_container.pardok.abstract)
-            ):
-                new_station.api_id = uuid.uuid5(self.crawler.settings.get("SCRAPER_UUID"), f"Station-{dok_container.pardok.id}-{new_station.typ}")
-                stationen.append(new_station)
+        stationen = self._build_stationen(dok_containers)
 
         dokument = stationen[0].dokumente[0]
         if isinstance(dokument, Dokument):
@@ -195,8 +149,9 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
 
         vorgang_schlagworte = get_vorgang_schlagworte(vorgang)
         document_schlagworte = get_document_schlagworte(dok_containers[0].pardok)
+
         return Vorgang(
-            api_id=uuid.uuid5(self.crawler.settings.get("SCRAPER_UUID"), vorgang.id),
+            api_id=_create_api_id(self.crawler.settings, vorgang.id),
             titel=titel,
             wahlperiode=self.wahlperiode,
             typ=Vorgangstyp.GG_LAND_PARL,
@@ -212,3 +167,82 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
             kurztitel=UNSET,
             lobbyregister=UNSET,
         )
+
+    def _build_stationen(self, dok_containers: list[DokumentContainer]) -> list[Station]:
+
+        stationen: list[Station] = []
+        for dok_container in dok_containers:
+            station_typ, (gremium, gremium_federf) = get_station_typ_and_gremium(dok_container)
+
+            zp_start, zp_modifiziert = get_station_zeitpunkte(dok_container)
+
+            api_id = _create_api_id(self.crawler.settings, f"Station-{dok_container.pardok.id}")
+
+            dokumente = cast("list[Dokument | UUID]", dok_container.pazufa)
+
+            station = Station(
+                api_id=api_id,
+                zp_start=zp_start,
+                zp_modifiziert=zp_modifiziert,
+                gremium=gremium,
+                typ=station_typ,
+                dokumente=dokumente,
+                titel=dok_container.pardok.typ_l or UNSET,
+                gremium_federf=gremium_federf,
+                # NOTE: Following should be revisited
+                link=UNSET,
+                additional_links=UNSET,
+                stellungnahmen=UNSET,
+            )
+            stationen.append(station)
+
+            abstract = dok_container.pardok.abstract
+
+            if abstract is None:
+                continue
+
+            new_station = check_and_create_vote_outcome_station(station=station, dok_abstract=abstract)
+
+            if new_station:
+                new_station.api_id = _create_api_id(self.crawler.settings, f"Station-{dok_container.pardok.id}-{new_station.typ}")
+
+                stationen.append(new_station)
+
+        return stationen
+
+    def _build_dok_containers(self, vorgang: GesetzVorgang) -> list[DokumentContainer]:
+
+        dok_containers: list[DokumentContainer] = []
+
+        for pardok in vorgang.dokumente:
+            pazufa_documents: list[Dokument] = []
+
+            for dokument_url in pardok.all_urls:
+                cache = self.get_cache(document=pardok, document_url=dokument_url)
+
+                pazufa_dokument = build_pazufa_dokument(dokument=pardok, cache=cache, url=dokument_url)
+
+                if pazufa_dokument:
+                    pazufa_documents.append(pazufa_dokument)
+
+            if len(pazufa_documents) > 0:
+                dok_containers.append(DokumentContainer(pardok, pazufa_documents))
+
+        if len(dok_containers) == 0:
+            self.increment_stats(VorgangCounter.DROP_NO_DOCUMENTS)
+            msg = f"[{vorgang.id}]: Could not create any Dokument from Vorgang."
+            raise DropItem(msg)
+
+        return apply_rules(pardok_pazufa_doks=dok_containers, rules=RULES)
+
+    def _gvbl_guard(self, vorgang: GesetzVorgang) -> None:
+        if len(vorgang.dokumente) == 1 and isinstance(vorgang.dokumente[0], GVBlDokument):
+            self.increment_stats(VorgangCounter.DROP_OUT_OF_SCOPE)
+            msg = f"[{vorgang.id}]: Out of scope. Single Gesetz- und Verordnungsblatt."
+            raise DropItem(msg, log_level="INFO")
+
+    def _empty_dok_containers_guard(self, vorgang: GesetzVorgang, dok_containers: list[DokumentContainer]) -> None:
+        if len(dok_containers) == 0:
+            self.increment_stats(VorgangCounter.DROP_NO_STATIONS)
+            msg = f"[{vorgang.id}]: Could not create any Stations."
+            raise DropItem(msg)
