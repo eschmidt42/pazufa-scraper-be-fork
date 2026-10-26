@@ -6,7 +6,7 @@ from .documents import (
     SummarizeText,
 )
 from .handle_errors import HandleErrors
-from .submit import SubmitVorgang
+from .submit_vorgang import SubmitVorgang
 
 __all__ = [
     "BuildPaZuFaVorgang",
