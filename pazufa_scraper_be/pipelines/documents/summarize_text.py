@@ -2,11 +2,11 @@ import logging
 from typing import Self
 
 from pazufa_corelib.llm import LLMProviderError
-from scrapy.exceptions import DropItem
 
 from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.pardok import BaseGesetzDokument, DrsDokument, GesetzVorgang, GVBlDokument
 from pazufa_scraper_be.pardok.dokument import Protokoll
+from pazufa_scraper_be.pipeline_guards import vorgang_guard
 from pazufa_scraper_be.pipelines._base import CachePipeline, LLMPipeline, StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import LLMCounter, SummaryCounter
 
@@ -54,11 +54,9 @@ class SummarizeText(CachePipeline, LLMPipeline, StatsPipeline):
         return None
 
     # TODO(se-jaeger): refactor to reduce complexity
-    async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:  # noqa: C901
+    async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:
         """Summarize extracted text for each document in the Vorgang and cache the result."""
-        if not isinstance(vorgang, GesetzVorgang):
-            msg = f"Expected {GesetzVorgang.__name__} object but got {vorgang.__class__.__name__}."
-            raise DropItem(msg)
+        vorgang_guard(vorgang)
 
         if self.llm_connector is None:
             return vorgang
