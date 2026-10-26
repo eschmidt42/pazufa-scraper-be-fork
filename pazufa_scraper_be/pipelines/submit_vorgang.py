@@ -2,11 +2,12 @@ import json
 import logging
 from datetime import UTC, datetime
 from http import HTTPStatus
-from typing import Self
+from typing import Any, Self
 
 from anyio import Path
 from pazufa_corelib.api_client.api.vorgang import vorgang_put
 from pazufa_corelib.api_client.models.vorgang import Vorgang
+from pazufa_corelib.api_client.types import Response
 from scrapy.exceptions import DropItem
 
 from pazufa_scraper_be.constants import SUBMISSION_ERROR_GRACE_PERIOD_DAYS
@@ -30,35 +31,45 @@ class SubmitVorgang(ApiPipeline, StatsPipeline):
         """Submit the Vorgang to the PaZuFa API via HTTP PUT."""
         vorgang_guard(vorgang)
 
-        if client := self.get_client():
-            async with client:
-                self.increment_stats(VorgangCounter.SUBMIT_ATTEMPT)
-                response = await vorgang_put.asyncio_detailed(client=client, body=vorgang, x_scraper_id=str(self._scraper_uuid))
+        client = self.get_client()
 
-            if response.status_code == HTTPStatus.CREATED:
-                self.increment_stats(VorgangCounter.SUBMIT_ACCEPTED)
+        if client is None:
+            return
 
-            else:
-                id_ = vorgang.ids[0].id if vorgang.ids else vorgang.api_id
-                url_part = f"URL: {vorgang.links[0]} " if vorgang.links else ""
+        async with client:
+            self.increment_stats(VorgangCounter.SUBMIT_ATTEMPT)
 
-                msg = f"[{id_}]: Got {response.status_code} status code when submitting to PaZuFa API. {url_part}Response: {response.content.decode('utf-8')}"
+            response = await vorgang_put.asyncio_detailed(client=client, body=vorgang, x_scraper_id=str(self._scraper_uuid))
 
-                last_update = vorgang.stationen[-1].zp_start.date()
-                days_since_last_update = (datetime.now(UTC).date() - last_update).days
-                if days_since_last_update < SUBMISSION_ERROR_GRACE_PERIOD_DAYS:
-                    self.increment_stats(VorgangCounter.SUBMIT_ERROR)
-                    logger.info(msg)
+        self._handle_success(response)
+        await self._handle_failure(response, vorgang)
 
-                else:
-                    self.increment_stats(VorgangCounter.submit_rejected_code(response.status_code))
-                    logger.warning(msg)
+    def _handle_success(self, response: Response[Any | str]) -> None:
+        if response.status_code == HTTPStatus.CREATED:
+            self.increment_stats(VorgangCounter.SUBMIT_ACCEPTED)
 
-                    # NOTE: For convenience, we save the failed submissions as JSON files into a temp dir.
-                    # We were asked multiple times to supply these to the backend devs, so we make this code persistent now
-                    temp_error_directory = self.crawler.stats.get_value("temp_error_directory")
-                    error_dir = Path(temp_error_directory) / f"{response.status_code}"
-                    await error_dir.mkdir(parents=True, exist_ok=True)
+    async def _handle_failure(self, response: Response[Any | str], vorgang: Vorgang) -> None:
 
-                    error_file = error_dir / f"{id_}.json"
-                    await error_file.write_text(json.dumps(vorgang.to_dict(), indent=2))
+        id_ = vorgang.ids[0].id if vorgang.ids else vorgang.api_id
+        url_part = f"URL: {vorgang.links[0]} " if vorgang.links else ""
+
+        msg = f"[{id_}]: Got {response.status_code} status code when submitting to PaZuFa API. {url_part}Response: {response.content.decode('utf-8')}"
+
+        last_update = vorgang.stationen[-1].zp_start.date()
+        days_since_last_update = (datetime.now(UTC).date() - last_update).days
+        if days_since_last_update < SUBMISSION_ERROR_GRACE_PERIOD_DAYS:
+            self.increment_stats(VorgangCounter.SUBMIT_ERROR)
+            logger.info(msg)
+
+        else:
+            self.increment_stats(VorgangCounter.submit_rejected_code(response.status_code))
+            logger.warning(msg)
+
+            # NOTE: For convenience, we save the failed submissions as JSON files into a temp dir.
+            # We were asked multiple times to supply these to the backend devs, so we make this code persistent now
+            temp_error_directory = self.crawler.stats.get_value("temp_error_directory")
+            error_dir = Path(temp_error_directory) / f"{response.status_code}"
+            await error_dir.mkdir(parents=True, exist_ok=True)
+
+            error_file = error_dir / f"{id_}.json"
+            await error_file.write_text(json.dumps(vorgang.to_dict(), indent=2))
