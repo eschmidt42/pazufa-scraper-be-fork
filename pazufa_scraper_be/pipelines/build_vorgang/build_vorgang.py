@@ -126,31 +126,9 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
         vorgang_guard(vorgang)
         self._gvbl_guard(vorgang)
 
-        dok_containers = []
-        for pardok in vorgang.dokumente:
-            pazufa = []
-            for dokument_url in pardok.all_urls:
-                cache = self.get_cache(document=pardok, document_url=dokument_url)
+        dok_containers = self._build_dok_containers(vorgang)
 
-                pazufa_dokument = build_pazufa_dokument(dokument=pardok, cache=cache, url=dokument_url)
-
-                if pazufa_dokument:
-                    pazufa.append(pazufa_dokument)
-
-            if len(pazufa) > 0:
-                dok_containers.append(DokumentContainer(pardok, pazufa))
-
-        if len(dok_containers) == 0:
-            self.increment_stats(VorgangCounter.DROP_NO_DOCUMENTS)
-            msg = f"[{vorgang.id}]: Could not create any Dokument from Vorgang."
-            raise DropItem(msg)
-
-        dok_containers = apply_rules(pardok_pazufa_doks=dok_containers, rules=RULES)
-
-        if len(dok_containers) == 0:
-            self.increment_stats(VorgangCounter.DROP_NO_STATIONS)
-            msg = f"[{vorgang.id}]: Could not create any Stations."
-            raise DropItem(msg)
+        self._empty_dok_containers_guard(vorgang, dok_containers)
 
         stationen: list[Station] = []
         for dok_container in dok_containers:
@@ -208,8 +186,39 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
             lobbyregister=UNSET,
         )
 
+    def _build_dok_containers(self, vorgang: GesetzVorgang) -> list[DokumentContainer]:
+
+        dok_containers: list[DokumentContainer] = []
+
+        for pardok in vorgang.dokumente:
+            pazufa_documents: list[Dokument] = []
+
+            for dokument_url in pardok.all_urls:
+                cache = self.get_cache(document=pardok, document_url=dokument_url)
+
+                pazufa_dokument = build_pazufa_dokument(dokument=pardok, cache=cache, url=dokument_url)
+
+                if pazufa_dokument:
+                    pazufa_documents.append(pazufa_dokument)
+
+            if len(pazufa_documents) > 0:
+                dok_containers.append(DokumentContainer(pardok, pazufa_documents))
+
+        if len(dok_containers) == 0:
+            self.increment_stats(VorgangCounter.DROP_NO_DOCUMENTS)
+            msg = f"[{vorgang.id}]: Could not create any Dokument from Vorgang."
+            raise DropItem(msg)
+
+        return apply_rules(pardok_pazufa_doks=dok_containers, rules=RULES)
+
     def _gvbl_guard(self, vorgang: GesetzVorgang) -> None:
         if len(vorgang.dokumente) == 1 and isinstance(vorgang.dokumente[0], GVBlDokument):
             self.increment_stats(VorgangCounter.DROP_OUT_OF_SCOPE)
             msg = f"[{vorgang.id}]: Out of scope. Single Gesetz- und Verordnungsblatt."
             raise DropItem(msg, log_level="INFO")
+
+    def _empty_dok_containers_guard(self, vorgang: GesetzVorgang, dok_containers: list[DokumentContainer]) -> None:
+        if len(dok_containers) == 0:
+            self.increment_stats(VorgangCounter.DROP_NO_STATIONS)
+            msg = f"[{vorgang.id}]: Could not create any Stations."
+            raise DropItem(msg)
