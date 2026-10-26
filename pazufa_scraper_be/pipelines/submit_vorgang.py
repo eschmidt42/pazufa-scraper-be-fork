@@ -16,14 +16,19 @@ from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 logger = logging.getLogger(__name__)
 
 
+def vorgang_guard(vorgang: Vorgang) -> None:
+    """Guards against unexpected `vorgang` type passed at runtime."""
+    if not isinstance(vorgang, Vorgang):
+        msg = f"Expected {Vorgang.__name__} object but got {vorgang.__class__.__name__}."
+        raise DropItem(msg)
+
+
 class SubmitVorgang(ApiPipeline, StatsPipeline):
     """Pipeline that submits a built Vorgang to the PaZuFa API."""
 
     async def process_item(self: Self, vorgang: Vorgang) -> None:
         """Submit the Vorgang to the PaZuFa API via HTTP PUT."""
-        if not isinstance(vorgang, Vorgang):
-            msg = f"Expected {Vorgang.__name__} object but got {vorgang.__class__.__name__}."
-            raise DropItem(msg)
+        vorgang_guard(vorgang)
 
         if client := self.get_client():
             async with client:
