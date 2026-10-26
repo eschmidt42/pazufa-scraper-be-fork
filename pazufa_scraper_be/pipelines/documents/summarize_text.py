@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 from typing import Self
 
 from pazufa_corelib.llm import LLMProviderError
@@ -16,11 +15,6 @@ logger = logging.getLogger(__name__)
 
 class SummarizeText(CachePipeline, LLMPipeline, StatsPipeline):
     """Pipeline that summarizes extracted document text via an LLM."""
-
-    def link(self: Self, summary_file: Path, model_specific_summary_file: Path) -> None:
-        """Create a symlink from summary_file pointing to the model-specific summary file."""
-        summary_file.unlink(missing_ok=True)
-        summary_file.symlink_to(model_specific_summary_file.relative_to(summary_file.parent))
 
     async def summarize(self: Self, dokument: BaseGesetzDokument, cache: Cache) -> str | None:
         """Summarize extracted document text via the LLM connector, dispatching by document type."""
