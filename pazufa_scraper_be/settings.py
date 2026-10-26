@@ -22,7 +22,7 @@ from pazufa_scraper_be.pipelines import (
     HandleErrors,
     PrepareDocumentUrls,
     SubmitVorgang,
-    SummarizeExtractedPDFText,
+    SummarizeText,
 )
 
 # Arguments
@@ -74,7 +74,7 @@ ITEM_PIPELINES = {
     PrepareDocumentUrls: 100,
     DownloadDocuments: 110,
     ExtractText: 120,
-    SummarizeExtractedPDFText: 130,
+    SummarizeText: 130,
     BuildPaZuFaVorgang: 999,
     SubmitVorgang: 1000,
 }

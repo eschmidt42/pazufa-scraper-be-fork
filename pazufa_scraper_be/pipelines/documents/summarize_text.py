@@ -14,7 +14,7 @@ from pazufa_scraper_be.pipelines.stats_counter import LLMCounter, SummaryCounter
 logger = logging.getLogger(__name__)
 
 
-class SummarizeExtractedPDFText(CachePipeline, LLMPipeline, StatsPipeline):
+class SummarizeText(CachePipeline, LLMPipeline, StatsPipeline):
     """Pipeline that summarizes extracted document text via an LLM."""
 
     def link(self: Self, summary_file: Path, model_specific_summary_file: Path) -> None:
