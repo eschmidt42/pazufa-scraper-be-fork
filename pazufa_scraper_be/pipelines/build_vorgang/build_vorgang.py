@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from typing import Self, cast
+from typing import TYPE_CHECKING, Self, cast
 from uuid import UUID
 
 from pazufa_corelib.api_client.models import Dokument, Ressort, Sachgebiet, Station, VgIdent, Vorgang, Vorgangstyp
@@ -35,6 +35,9 @@ from pazufa_scraper_be.pipelines.build_vorgang.utils import (
     uniqify,
 )
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
+
+if TYPE_CHECKING:
+    from scrapy.settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -117,10 +120,13 @@ def _get_ressort() -> Ressort | Unset | None:
     return UNSET
 
 
+def _create_api_id(settings: Settings, station_name: str) -> UUID:
+    return uuid.uuid5(settings.get("SCRAPER_UUID"), station_name)
+
+
 class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
     """Pipeline that converts a GesetzVorgang into a PaZuFa Vorgang API model."""
 
-    # TODO(se-jaeger): refactor to reduce complexity
     async def process_item(self: Self, vorgang: GesetzVorgang) -> PaZuFaVorgang:
         """Build and return a PaZuFa Vorgang from a parsed GesetzVorgang."""
         vorgang_guard(vorgang)
@@ -143,8 +149,9 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
 
         vorgang_schlagworte = get_vorgang_schlagworte(vorgang)
         document_schlagworte = get_document_schlagworte(dok_containers[0].pardok)
+
         return Vorgang(
-            api_id=uuid.uuid5(self.crawler.settings.get("SCRAPER_UUID"), vorgang.id),
+            api_id=_create_api_id(self.crawler.settings, vorgang.id),
             titel=titel,
             wahlperiode=self.wahlperiode,
             typ=Vorgangstyp.GG_LAND_PARL,
@@ -169,7 +176,7 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
 
             zp_start, zp_modifiziert = get_station_zeitpunkte(dok_container)
 
-            api_id = uuid.uuid5(self.crawler.settings.get("SCRAPER_UUID"), f"Station-{dok_container.pardok.id}")
+            api_id = _create_api_id(self.crawler.settings, f"Station-{dok_container.pardok.id}")
 
             dokumente = cast("list[Dokument | UUID]", dok_container.pazufa)
 
@@ -197,7 +204,7 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
             new_station = check_and_create_vote_outcome_station(station=station, dok_abstract=abstract)
 
             if new_station:
-                new_station.api_id = uuid.uuid5(self.crawler.settings.get("SCRAPER_UUID"), f"Station-{dok_container.pardok.id}-{new_station.typ}")
+                new_station.api_id = _create_api_id(self.crawler.settings, f"Station-{dok_container.pardok.id}-{new_station.typ}")
 
                 stationen.append(new_station)
 
