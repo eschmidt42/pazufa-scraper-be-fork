@@ -3,7 +3,7 @@ from .documents import (
     DownloadDocuments,
     ExtractText,
     PrepareDocumentUrls,
-    SummarizeExtractedPDFText,
+    SummarizeText,
 )
 from .handle_errors import HandleErrors
 from .submit import SubmitVorgang
@@ -15,5 +15,5 @@ __all__ = [
     "HandleErrors",
     "PrepareDocumentUrls",
     "SubmitVorgang",
-    "SummarizeExtractedPDFText",
+    "SummarizeText",
 ]

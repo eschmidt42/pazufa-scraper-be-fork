@@ -101,7 +101,7 @@ PaZuFa/Text/
 
 ### LLM + Summary
 
-*Emitted by `SummarizeExtractedPDFText`.*
+*Emitted by `SummarizeText`.*
 
 One count per document URL processed.
 
