@@ -5,8 +5,8 @@ from pazufa_corelib.llm import LLMProviderError
 from pydantic import HttpUrl
 
 from pazufa_scraper_be.cache import Cache, Key
-from pazufa_scraper_be.pardok import AnyGesetzDokument, BaseGesetzDokument, DrsDokument, GesetzVorgang, GVBlDokument
-from pazufa_scraper_be.pardok.dokument import Protokoll
+from pazufa_scraper_be.pardok import AnyGesetzDokument, DrsDokument, GesetzVorgang, GVBlDokument
+from pazufa_scraper_be.pardok.dokument import DeskTitelSbMixin, Protokoll
 from pazufa_scraper_be.pipeline_guards import vorgang_guard
 from pazufa_scraper_be.pipelines._base import CachePipeline, LLMPipeline, StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import LLMCounter, SummaryCounter
@@ -17,44 +17,52 @@ logger = logging.getLogger(__name__)
 class SummarizeText(CachePipeline, LLMPipeline, StatsPipeline):
     """Pipeline that summarizes extracted document text via an LLM."""
 
-    async def summarize(self: Self, dokument: BaseGesetzDokument, cache: Cache) -> str | None:
+    async def summarize(self: Self, dokument: AnyGesetzDokument, cache: Cache) -> str | None:
         """Summarize extracted document text via the LLM connector, dispatching by document type."""
         if self.llm_connector is None:
             return None
 
         self.increment_stats(LLMCounter.SUMMARIZE_TOTAL)
-        if len(dokument.vorgang.dokumente) > 0:
-            titel = getattr(dokument.vorgang.dokumente[0], "titel", "")
-            vorgang_nr = dokument.vorgang.dokumente[0].nr or ""
 
-        else:
-            titel = vorgang_nr = ""
+        titel: str = ""
+        vorgang_nr: str = ""
+
+        if len(dokument.vorgang.dokumente) > 0:
+            first_document = dokument.vorgang.dokumente[0]
+            if isinstance(first_document, DeskTitelSbMixin):
+                titel = first_document.titel or ""
+
+            vorgang_nr = first_document.nr or ""
 
         text = cache.get_text(Key.TEXT)
+        art_l_summary_name = LLMCounter.summarize_art(dokument.art_l.lower())
 
         if isinstance(dokument, Protokoll):
             self.increment_stats(LLMCounter.EXTRACT_RELEVANT_SECTION_TOTAL)
+
             relevant_section = await self.llm_connector.extract_relevant_section(text=text, vorgang_titel=titel, vorgang_vnr=vorgang_nr)
 
             if relevant_section:
                 self.increment_stats(LLMCounter.EXTRACT_RELEVANT_SECTION_DONE)
-                self.increment_stats(LLMCounter.summarize_art(dokument.art_l.lower()))
+                self.increment_stats(art_l_summary_name)
+
                 return await self.llm_connector.summarize_dokument(titel=titel, text=relevant_section)
 
             cache[Key.SUMMARY_IGNORE] = "Ignoring because no relevant section was found."
             self.increment_stats(LLMCounter.EXTRACT_RELEVANT_SECTION_FAILED)
 
         elif isinstance(dokument, GVBlDokument):
-            self.increment_stats(LLMCounter.summarize_art(dokument.art_l.lower()))
+            self.increment_stats(art_l_summary_name)
+
             return await self.llm_connector.summarize_gesetzentwurf(titel=titel, text=text)
 
         elif isinstance(dokument, DrsDokument):
-            self.increment_stats(LLMCounter.summarize_art(dokument.art_l.lower()))
+            self.increment_stats(art_l_summary_name)
+
             return await self.llm_connector.summarize_dokument(titel=titel, text=text)
 
         return None
 
-    # TODO(se-jaeger): refactor to reduce complexity
     async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:
         """Summarize extracted text for each document in the Vorgang and cache the result."""
         vorgang_guard(vorgang)
