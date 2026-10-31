@@ -18,6 +18,7 @@ from pazufa_scraper_be.pipelines._base import (
     CachePipeline,
     LLMPipeline,
     StatsPipeline,
+    _get_wahlperiode,
 )
 from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
 
@@ -37,6 +38,23 @@ def make_crawler(settings: dict | None = None, stats: StatsCollector | None = No
     crawler = Crawler(Spider, Settings(settings or {}))
     crawler.stats = stats or StatsCollector(crawler)
     return crawler
+
+
+def test__get_wahlperiode_returns_configured_value() -> None:
+    """The configured Wahlperiode setting is returned."""
+    assert _get_wahlperiode(make_crawler({"WAHLPERIODE": WAHLPERIODE})) == WAHLPERIODE
+
+
+def test__get_wahlperiode_uses_scrapy_default_when_setting_is_missing() -> None:
+    """Scrapy's default is returned when WAHLPERIODE is absent."""
+    assert _get_wahlperiode(make_crawler()) == 0
+
+
+def test__get_wahlperiode_raises_when_setting_is_none() -> None:
+    """A None setting raises a clear error."""
+    crawler = make_crawler()
+    with patch.object(crawler.settings, "getint", return_value=None), pytest.raises(ValueError, match="Missing WAHLPERIODE"):
+        _get_wahlperiode(crawler)
 
 
 def test__base_pipeline_from_crawler_initializes_pipeline() -> None:

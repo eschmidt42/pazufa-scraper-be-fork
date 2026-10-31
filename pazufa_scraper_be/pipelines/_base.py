@@ -17,6 +17,16 @@ from pazufa_scraper_be.pipelines.stats_counter import StatsCounter
 logger = logging.getLogger(__name__)
 
 
+def _get_wahlperiode(crawler: Crawler) -> int:
+    wahlperiode = crawler.settings.getint("WAHLPERIODE")
+
+    if wahlperiode is None:
+        msg = "Missing WAHLPERIODE setting."
+        raise ValueError(msg)
+
+    return wahlperiode
+
+
 class BasePipeline(ABC):
     @classmethod
     def from_crawler(cls, crawler: Crawler) -> Self:
@@ -24,11 +34,7 @@ class BasePipeline(ABC):
 
     def __init__(self: Self, crawler: Crawler) -> None:
         self.crawler = crawler
-        self.wahlperiode = self.crawler.settings.getint("WAHLPERIODE")
-
-        if self.wahlperiode is None:
-            msg = "Missing WAHLPERIODE setting."
-            raise ValueError(msg)
+        self.wahlperiode = _get_wahlperiode(crawler)
 
         self.init()
 
