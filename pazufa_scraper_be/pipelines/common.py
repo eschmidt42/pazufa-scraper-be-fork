@@ -1,13 +1,14 @@
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Self
+from typing import Any, Self
 
 import litellm
 from pazufa_corelib.api_client import AuthenticatedClient
 from pazufa_corelib.llm import LLMConnector
 from pydantic import HttpUrl
 from scrapy.crawler import Crawler
+from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.cache import Cache
 from pazufa_scraper_be.constants import DOK_BASE_URL, DOK_CACHE_SUB_DIR_PATH
@@ -29,6 +30,9 @@ def _get_wahlperiode(crawler: Crawler) -> int:
 
 class BasePipeline(ABC):
     """Provide shared crawler initialization for pipeline implementations."""
+
+    crawler: Crawler
+    wahlperiode: int
 
     @classmethod
     def from_crawler(cls, crawler: Crawler) -> Self:
@@ -54,6 +58,8 @@ class StatsPipeline(BasePipeline):
     Reference: https://docs.scrapy.org/en/latest/topics/stats.html
     """
 
+    stats: StatsCollector
+
     def init(self: Self) -> None:
         """Expose the crawler's stats collector."""
         super().init()
@@ -68,6 +74,9 @@ class StatsPipeline(BasePipeline):
 
 class CachePipeline(BasePipeline):
     """Provide helpers for caching document downloads."""
+
+    _cache_dir: Path
+    _dok_cache_dir: Path
 
     def init(self: Self) -> None:
         """Resolve cache directories from crawler settings."""
@@ -94,6 +103,10 @@ class CachePipeline(BasePipeline):
 
 class ApiPipeline(BasePipeline):
     """Configure API submission from crawler settings."""
+
+    _api_url: Any
+    _api_token: Any
+    _scraper_uuid: Any
 
     def init(self: Self) -> None:
         """Load and validate API credentials and settings."""
@@ -126,6 +139,10 @@ class ApiPipeline(BasePipeline):
 
 class LLMPipeline(BasePipeline):
     """Configure document summarization from crawler settings."""
+
+    _llm_token: Any
+    llm_model_name: Any
+    llm_connector: LLMConnector | None
 
     def init(self: Self) -> None:
         """Load and validate LLM settings and initialize the connector."""
