@@ -40,7 +40,7 @@ def summarize_pipeline(tmp_path: Path) -> tuple[SummarizeText, MagicMock]:
     )
     crawler.stats = StatsCollector(crawler)
 
-    with patch("pazufa_scraper_be.pipelines._base.LLMConnector", return_value=connector):
+    with patch("pazufa_scraper_be.pipelines.common.LLMConnector", return_value=connector):
         pipeline = SummarizeText(crawler)
 
     return pipeline, connector

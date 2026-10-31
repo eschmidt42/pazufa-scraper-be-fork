@@ -28,18 +28,24 @@ def _get_wahlperiode(crawler: Crawler) -> int:
 
 
 class BasePipeline(ABC):
+    """Provide shared crawler initialization for pipeline implementations."""
+
     @classmethod
     def from_crawler(cls, crawler: Crawler) -> Self:
+        """Create a pipeline instance from a Scrapy crawler."""
         return cls(crawler=crawler)
 
     def __init__(self: Self, crawler: Crawler) -> None:
+        """Store the crawler and initialize pipeline-specific state."""
         self.crawler = crawler
         self.wahlperiode = _get_wahlperiode(crawler)
 
         self.init()
 
     @abstractmethod
-    def init(self: Self) -> None: ...
+    def init(self: Self) -> None:
+        """Initialize state specific to the concrete pipeline."""
+        ...
 
 
 class StatsPipeline(BasePipeline):
@@ -49,17 +55,22 @@ class StatsPipeline(BasePipeline):
     """
 
     def init(self: Self) -> None:
+        """Expose the crawler's stats collector."""
         super().init()
 
         self.stats = self.crawler.stats
 
     def increment_stats(self: Self, counter: StatsCounter | str) -> None:
+        """Increment a named stats counter."""
         key = counter.value if isinstance(counter, StatsCounter) else counter
         self.stats.inc_value(key)
 
 
 class CachePipeline(BasePipeline):
+    """Provide helpers for caching document downloads."""
+
     def init(self: Self) -> None:
+        """Resolve cache directories from crawler settings."""
         super().init()
 
         cache_dir = self.crawler.settings.get("CACHE_DIR")
@@ -72,7 +83,7 @@ class CachePipeline(BasePipeline):
         self._dok_cache_dir = self._cache_dir / DOK_CACHE_SUB_DIR_PATH
 
     def get_cache(self: Self, document: AnyGesetzDokument, document_url: HttpUrl) -> Cache:
-
+        """Build a cache for a URL associated with a document."""
         if document_url != document.lok_url and document.additional_urls and document_url not in document.additional_urls:
             msg = f"[{document.vorgang.id} - {document.id}]: Did not setup dokument cache because given URL is unknown: {document_url}"
             raise ValueError(msg)
@@ -82,7 +93,10 @@ class CachePipeline(BasePipeline):
 
 
 class ApiPipeline(BasePipeline):
+    """Configure API submission from crawler settings."""
+
     def init(self: Self) -> None:
+        """Load and validate API credentials and settings."""
         super().init()
 
         self._api_url = self.crawler.settings.get("API_URL", None)
@@ -103,6 +117,7 @@ class ApiPipeline(BasePipeline):
             logger.info(msg)
 
     def get_client(self: Self) -> AuthenticatedClient | None:
+        """Return an authenticated backend client when configured."""
         if self._api_token is not None:
             return AuthenticatedClient(base_url=self._api_url, token=self._api_token, prefix="", auth_header_name="X-API-Key")
 
@@ -110,7 +125,10 @@ class ApiPipeline(BasePipeline):
 
 
 class LLMPipeline(BasePipeline):
+    """Configure document summarization from crawler settings."""
+
     def init(self: Self) -> None:
+        """Load and validate LLM settings and initialize the connector."""
         super().init()
 
         self._llm_token = self.crawler.settings.get("LLM_TOKEN", None)

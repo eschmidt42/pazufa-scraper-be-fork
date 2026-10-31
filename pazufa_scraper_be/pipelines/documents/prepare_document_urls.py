@@ -4,7 +4,7 @@ from typing import Self
 from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang
 from pazufa_scraper_be.pardok.url import UrlResolution, add_additional_urls, add_missing_plprdokument_primary_url, fix_url, resolve_document_urls
 from pazufa_scraper_be.pipeline_guards import engine_guard, vorgang_guard
-from pazufa_scraper_be.pipelines._base import StatsPipeline
+from pazufa_scraper_be.pipelines.common import StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
 
 logger = logging.getLogger(__name__)

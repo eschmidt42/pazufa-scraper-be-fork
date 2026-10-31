@@ -8,7 +8,7 @@ from xberg import ExtractInput, ExtractInputKind
 from pazufa_scraper_be.cache import Key
 from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang
 from pazufa_scraper_be.pipeline_guards import vorgang_guard
-from pazufa_scraper_be.pipelines._base import CachePipeline, StatsPipeline
+from pazufa_scraper_be.pipelines.common import CachePipeline, StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import TextCounter
 from pazufa_scraper_be.xberg_config import get_xberg_config
 

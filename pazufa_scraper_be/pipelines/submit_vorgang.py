@@ -11,7 +11,7 @@ from pazufa_corelib.api_client.types import Response
 from scrapy.exceptions import DropItem
 
 from pazufa_scraper_be.constants import SUBMISSION_ERROR_GRACE_PERIOD_DAYS
-from pazufa_scraper_be.pipelines._base import ApiPipeline, StatsPipeline
+from pazufa_scraper_be.pipelines.common import ApiPipeline, StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 
 logger = logging.getLogger(__name__)

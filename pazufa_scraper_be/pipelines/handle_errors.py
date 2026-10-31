@@ -3,7 +3,7 @@ from typing import Self
 from scrapy.exceptions import DropItem
 
 from pazufa_scraper_be.pardok import GesetzVorgang
-from pazufa_scraper_be.pipelines._base import StatsPipeline
+from pazufa_scraper_be.pipelines.common import StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 
 

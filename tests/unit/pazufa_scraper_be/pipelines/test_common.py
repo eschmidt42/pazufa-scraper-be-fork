@@ -12,7 +12,7 @@ from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.constants import DOK_BASE_URL
 from pazufa_scraper_be.pardok import GesetzVorgang, PlPrDokument
-from pazufa_scraper_be.pipelines._base import (
+from pazufa_scraper_be.pipelines.common import (
     ApiPipeline,
     BasePipeline,
     CachePipeline,
@@ -153,7 +153,7 @@ def test__api_pipeline_without_token_has_no_client(caplog: pytest.LogCaptureFixt
 def test__api_pipeline_creates_authenticated_client() -> None:
     """Configured API credentials are passed to AuthenticatedClient."""
     settings = {"WAHLPERIODE": WAHLPERIODE, "API_URL": "https://api.example", "API_TOKEN": "test-value", "SCRAPER_UUID": "uuid"}
-    with patch("pazufa_scraper_be.pipelines._base.AuthenticatedClient") as client:
+    with patch("pazufa_scraper_be.pipelines.common.AuthenticatedClient") as client:
         pipeline = ApiPipeline(make_crawler(settings))
 
         result = pipeline.get_client()
@@ -197,7 +197,7 @@ def test__llm_pipeline_requires_positive_timeout(timeout: int) -> None:
 def test__llm_pipeline_creates_connector_and_configures_litellm() -> None:
     """Configured LLM settings are passed to LLMConnector."""
     settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token", "LLM_MODEL": "model", "LLM_TIMEOUT": 30}
-    with patch("pazufa_scraper_be.pipelines._base.LLMConnector") as connector:
+    with patch("pazufa_scraper_be.pipelines.common.LLMConnector") as connector:
         pipeline = LLMPipeline(make_crawler(settings))
 
     assert pipeline.llm_connector is connector.return_value
