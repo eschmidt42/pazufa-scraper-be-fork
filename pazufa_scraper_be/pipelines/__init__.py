@@ -10,7 +10,7 @@ from .documents import (
     SummarizeText2,
 )
 from .handle_errors import HandleErrors, HandleErrors2
-from .submit_vorgang import SubmitVorgang
+from .submit_vorgang import SubmitVorgang, SubmitVorgang2
 
 __all__ = [
     "BuildPaZuFaVorgang",
@@ -24,6 +24,7 @@ __all__ = [
     "PrepareDocumentUrls",
     "PrepareDocumentUrls2",
     "SubmitVorgang",
+    "SubmitVorgang2",
     "SummarizeText",
     "SummarizeText2",
 ]
