@@ -9,7 +9,7 @@ from scrapy.crawler import Crawler
 from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.pardok import AnyGesetzDokument, DrsDokument, GesetzVorgang, GVBlDokument
 from pazufa_scraper_be.pardok.dokument import DeskTitelSbMixin, Protokoll
-from pazufa_scraper_be.pipeline_guards import vorgang_guard
+from pazufa_scraper_be.pipeline_guards import gesetzvorgang_guard
 from pazufa_scraper_be.pipelines.common import DocumentCacheFactory, StatsReporter
 from pazufa_scraper_be.pipelines.stats_counter import LLMCounter, SummaryCounter
 
@@ -130,7 +130,7 @@ class SummarizeText:
 
     async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:
         """Summarize extracted text for each document in the Vorgang and cache the result."""
-        vorgang_guard(vorgang)
+        gesetzvorgang_guard(vorgang)
 
         if self._llm_connector is None:
             return vorgang

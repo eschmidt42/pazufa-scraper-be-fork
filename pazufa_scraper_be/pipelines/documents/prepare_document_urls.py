@@ -5,7 +5,7 @@ from scrapy.crawler import Crawler
 
 from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang
 from pazufa_scraper_be.pardok.url import UrlResolution, add_additional_urls, add_missing_plprdokument_primary_url, fix_url, resolve_document_urls
-from pazufa_scraper_be.pipeline_guards import engine_guard, vorgang_guard
+from pazufa_scraper_be.pipeline_guards import engine_guard, gesetzvorgang_guard
 from pazufa_scraper_be.pipelines.common import StatsReporter, get_wahlperiode
 from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
 
@@ -32,7 +32,7 @@ class PrepareDocumentUrls:
 
     async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:
         """Check for additional Ausschussprotokoll URLs and append them to each document."""
-        vorgang_guard(vorgang)
+        gesetzvorgang_guard(vorgang)
         engine_guard(self._crawler)
 
         for dokument in vorgang.dokumente:

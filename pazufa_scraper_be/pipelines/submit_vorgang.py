@@ -12,20 +12,13 @@ from pazufa_corelib.api_client.api.vorgang import vorgang_put
 from pazufa_corelib.api_client.models.vorgang import Vorgang
 from pazufa_corelib.api_client.types import Response
 from scrapy.crawler import Crawler
-from scrapy.exceptions import DropItem
 
 from pazufa_scraper_be.constants import SUBMISSION_ERROR_GRACE_PERIOD_DAYS
+from pazufa_scraper_be.pipeline_guards import api_config_guard, uuid_guard, vorgang_guard
 from pazufa_scraper_be.pipelines.common import StatsReporter
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 
 logger = logging.getLogger(__name__)
-
-
-def vorgang_guard(vorgang: Vorgang) -> None:
-    """Guards against unexpected `vorgang` type passed at runtime."""
-    if not isinstance(vorgang, Vorgang):
-        msg = f"Expected {Vorgang.__name__} object but got {vorgang.__class__.__name__}."
-        raise DropItem(msg)
 
 
 def get_client(*, token: str | None, url: str) -> AuthenticatedClient | None:
@@ -34,23 +27,6 @@ def get_client(*, token: str | None, url: str) -> AuthenticatedClient | None:
         return AuthenticatedClient(base_url=url, token=token, prefix="", auth_header_name="X-API-Key")
 
     return None
-
-
-def api_config_guard(api_url: str | None, api_token: str | None) -> None:
-    """Guards against improper api config."""
-    if api_token is not None and api_url is None:
-        msg = "If API_TOKEN is set, API_URL setting is required."
-        raise ValueError(msg)
-
-    msg = "API_TOKEN is not set. Will not submit to backend."
-    logger.info(msg)
-
-
-def uuid_guard(scraper_uuid: UUID | None) -> None:
-    """Guards against missing uui value."""
-    if scraper_uuid is None:
-        msg = "Missing SCRAPER_UUID setting."
-        raise ValueError(msg)
 
 
 class SubmitVorgang:
