@@ -77,7 +77,7 @@ def test_summarize_pipeline_skips_when_llm_is_disabled(
 ) -> None:
     """An item is returned unchanged when no LLM connector is configured."""
     pipeline, connector = summarize_pipeline
-    pipeline.llm_connector = None
+    pipeline._llm_connector = None
     item = GesetzVorgang.model_validate({**base_vorgang_data, "Dokument": [drs_data]})
 
     result = asyncio.run(pipeline.process_item(item))
@@ -273,7 +273,7 @@ def test__llm_pipeline_without_token_skips_connector(caplog: pytest.LogCaptureFi
     with caplog.at_level(logging.INFO):
         pipeline = SummarizeText.from_crawler(make_crawler({"WAHLPERIODE": WAHLPERIODE, "CACHE_DIR": tmp_path / "cache"}))
 
-    assert pipeline.llm_connector is None
+    assert pipeline._llm_connector is None
     assert "LLM_TOKEN is not set" in caplog.text
 
 
@@ -300,5 +300,5 @@ def test__llm_pipeline_creates_connector_and_configures_litellm(tmp_path: Path) 
     with patch("pazufa_scraper_be.pipelines.documents.summarize_text.LLMConnector") as connector:
         pipeline = SummarizeText.from_crawler(make_crawler(settings))
 
-    assert pipeline.llm_connector is connector.return_value
+    assert pipeline._llm_connector is connector.return_value
     connector.assert_called_once_with(model="model", api_key="token", timeout_seconds=30)

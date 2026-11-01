@@ -81,8 +81,8 @@ def _is_in_current_wahlperiode(wahlperiode: int, vorgang: GesetzVorgang, dokumen
 class DownloadDocuments:
     """Pipeline that downloads and caches PDF documents for each Vorgang."""
 
-    crawler: Crawler
-    wahlperiode: int
+    _crawler: Crawler
+    _wahlperiode: int
     _cache_factory: DocumentCacheFactory
     _stats: StatsReporter
 
@@ -95,18 +95,18 @@ class DownloadDocuments:
 
     def __init__(self, crawler: Crawler, wahlperiode: int, cache_factory: DocumentCacheFactory, stats: StatsReporter) -> None:
         """Initialize the pipeline with crawler, election period, cache factory, and stats."""
-        self.crawler = crawler
-        self.wahlperiode = wahlperiode
+        self._crawler = crawler
+        self._wahlperiode = wahlperiode
         self._cache_factory = cache_factory
         self._stats = stats
 
     async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:
         """Download and cache all document PDFs for the given Vorgang."""
         vorgang_guard(vorgang)
-        engine_guard(self.crawler)
+        engine_guard(self._crawler)
 
         for dokument in vorgang.dokumente:
-            if not _is_in_current_wahlperiode(self.wahlperiode, vorgang, dokument):
+            if not _is_in_current_wahlperiode(self._wahlperiode, vorgang, dokument):
                 continue
 
             for dokument_url in dokument.all_urls:
@@ -135,7 +135,7 @@ class DownloadDocuments:
             self._stats.increment(DokumentCounter.CACHE_MISS)
             return False
 
-        reset = await _reset_cache_if_file_got_modified(cache, dokument_url, engine=self.crawler.engine)
+        reset = await _reset_cache_if_file_got_modified(cache, dokument_url, engine=self._crawler.engine)
 
         if reset:
             self._stats.increment(DokumentCounter.CACHE_RESET)
@@ -145,7 +145,7 @@ class DownloadDocuments:
         return True
 
     async def _download_valid_response(self, vorgang: GesetzVorgang, dokument: AnyGesetzDokument, dokument_url: HttpUrl) -> tuple[datetime, Response] | None:
-        downloaded_at, response = await download_document(dokument_url, self.crawler)
+        downloaded_at, response = await download_document(dokument_url, self._crawler)
 
         if not isinstance(response, Response):
             self._stats.increment(DokumentCounter.DOWNLOAD_FAILED_INCORRECT_RESPONSE)

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class PrepareDocumentUrls:
     """Pipeline that fixes and adds additional document URLs."""
 
-    wahlperiode: int
+    _wahlperiode: int
     _stats: StatsReporter
     _crawler: Crawler
 
@@ -26,7 +26,7 @@ class PrepareDocumentUrls:
 
     def __init__(self, wahlperiode: int, stats: StatsReporter, crawler: Crawler) -> None:
         """Initialize the pipeline with its election period, stats reporter, and engine."""
-        self.wahlperiode = wahlperiode
+        self._wahlperiode = wahlperiode
         self._stats = stats
         self._crawler = crawler
 
@@ -37,7 +37,7 @@ class PrepareDocumentUrls:
 
         for dokument in vorgang.dokumente:
             dokument.lok_url = fix_url(dokument)
-            dokument.lok_url = add_missing_plprdokument_primary_url(dokument, self.wahlperiode)
+            dokument.lok_url = add_missing_plprdokument_primary_url(dokument, self._wahlperiode)
             dokument.lok_url, dokument.additional_urls = add_additional_urls(dokument)
             dokument.additional_urls, res = await resolve_document_urls(dokument, self._crawler.engine)
 
