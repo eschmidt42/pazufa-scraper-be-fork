@@ -25,6 +25,14 @@ def vorgang_guard(vorgang: Vorgang) -> None:
         raise DropItem(msg)
 
 
+def get_client(*, token: str | None, url: str) -> AuthenticatedClient | None:
+    """Return an authenticated backend client when configured privded api token and url."""
+    if token is not None:
+        return AuthenticatedClient(base_url=url, token=token, prefix="", auth_header_name="X-API-Key")
+
+    return None
+
+
 class SubmitVorgang(StatsPipeline):
     """Pipeline that submits a built Vorgang to the PaZuFa API."""
 
@@ -53,18 +61,11 @@ class SubmitVorgang(StatsPipeline):
             msg = "API_TOKEN is not set. Will not submit to backend."
             logger.info(msg)
 
-    def get_client(self: Self) -> AuthenticatedClient | None:
-        """Return an authenticated backend client when configured."""
-        if self._api_token is not None:
-            return AuthenticatedClient(base_url=self._api_url, token=self._api_token, prefix="", auth_header_name="X-API-Key")
-
-        return None
-
     async def process_item(self: Self, vorgang: Vorgang) -> None:
         """Submit the Vorgang to the PaZuFa API via HTTP PUT."""
         vorgang_guard(vorgang)
 
-        client = self.get_client()
+        client = get_client(token=self._api_token, url=self._api_url)
 
         if client is None:
             return

@@ -25,7 +25,7 @@ from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.constants import SUBMISSION_ERROR_GRACE_PERIOD_DAYS
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
-from pazufa_scraper_be.pipelines.submit_vorgang import SubmitVorgang
+from pazufa_scraper_be.pipelines.submit_vorgang import SubmitVorgang, get_client
 
 WAHLPERIODE = 19
 
@@ -103,7 +103,7 @@ def test__api_pipeline_without_token_has_no_client(caplog: pytest.LogCaptureFixt
     with caplog.at_level(logging.INFO):
         pipeline = SubmitVorgang(make_crawler({"WAHLPERIODE": WAHLPERIODE, "SCRAPER_UUID": "uuid"}))
 
-    assert pipeline.get_client() is None
+    assert get_client(token=pipeline._api_token, url=pipeline._api_url) is None
     assert "API_TOKEN is not set" in caplog.text
 
 
@@ -113,7 +113,7 @@ def test__api_pipeline_creates_authenticated_client() -> None:
     with patch("pazufa_scraper_be.pipelines.submit_vorgang.AuthenticatedClient") as client:
         pipeline = SubmitVorgang(make_crawler(settings))
 
-        result = pipeline.get_client()
+        result = get_client(token=pipeline._api_token, url=pipeline._api_url)
 
     assert result is client.return_value
     client.assert_called_once()
@@ -149,7 +149,7 @@ def test_submit_vorgang_counts_created_response(
     """A 201 response is counted as an accepted submission."""
     client = _mock_client()
     with (
-        patch.object(submit_pipeline, "get_client", return_value=client),
+        patch("pazufa_scraper_be.pipelines.submit_vorgang.get_client", return_value=client),
         patch(
             "pazufa_scraper_be.pipelines.submit_vorgang.vorgang_put.asyncio_detailed",
             new_callable=AsyncMock,
@@ -177,7 +177,7 @@ def test_submit_vorgang_counts_recent_api_error_as_grace_period_error(
     response = MagicMock(status_code=HTTPStatus.BAD_REQUEST, content=b"temporary error")
 
     with (
-        patch.object(submit_pipeline, "get_client", return_value=client),
+        patch("pazufa_scraper_be.pipelines.submit_vorgang.get_client", return_value=client),
         patch(
             "pazufa_scraper_be.pipelines.submit_vorgang.vorgang_put.asyncio_detailed",
             new_callable=AsyncMock,
@@ -201,7 +201,7 @@ def test_submit_vorgang_saves_old_rejection(
     response = MagicMock(status_code=HTTPStatus.BAD_REQUEST, content=b"rejected")
 
     with (
-        patch.object(submit_pipeline, "get_client", return_value=client),
+        patch("pazufa_scraper_be.pipelines.submit_vorgang.get_client", return_value=client),
         patch(
             "pazufa_scraper_be.pipelines.submit_vorgang.vorgang_put.asyncio_detailed",
             new_callable=AsyncMock,
