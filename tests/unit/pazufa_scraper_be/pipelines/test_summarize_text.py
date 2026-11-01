@@ -18,7 +18,7 @@ from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.constants import DOK_BASE_URL
 from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang, PlPrDokument
 from pazufa_scraper_be.pipelines.common import CachePipeline
-from pazufa_scraper_be.pipelines.documents.summarize_text import LLMPipeline, SummarizeText
+from pazufa_scraper_be.pipelines.documents.summarize_text import SummarizeText
 from pazufa_scraper_be.pipelines.stats_counter import LLMCounter, SummaryCounter
 
 WAHLPERIODE = 19
@@ -281,37 +281,37 @@ def test__cache_pipeline_accepts_additional_url(tmp_path: Path, plpr_data: dict)
     assert result
 
 
-def test__llm_pipeline_without_token_skips_connector(caplog: pytest.LogCaptureFixture) -> None:
+def test__llm_pipeline_without_token_skips_connector(caplog: pytest.LogCaptureFixture, tmp_path: Path) -> None:
     """Without an LLM token, summarization is disabled."""
     with caplog.at_level(logging.INFO):
-        pipeline = LLMPipeline(make_crawler({"WAHLPERIODE": WAHLPERIODE}))
+        pipeline = SummarizeText(make_crawler({"WAHLPERIODE": WAHLPERIODE, "CACHE_DIR": tmp_path / "cache"}))
 
     assert pipeline.llm_connector is None
     assert "LLM_TOKEN is not set" in caplog.text
 
 
-def test__llm_pipeline_requires_model_when_token_is_set() -> None:
+def test__llm_pipeline_requires_model_when_token_is_set(tmp_path: Path) -> None:
     """An LLM token requires a model name."""
-    settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token"}
+    settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token", "CACHE_DIR": tmp_path / "cache"}
 
     with pytest.raises(ValueError, match="LLM_MODEL setting is required"):
-        LLMPipeline(make_crawler(settings))
+        SummarizeText(make_crawler(settings))
 
 
 @pytest.mark.parametrize("timeout", [0, -1])
-def test__llm_pipeline_requires_positive_timeout(timeout: int) -> None:
+def test__llm_pipeline_requires_positive_timeout(timeout: int, tmp_path: Path) -> None:
     """LLM timeout must be a positive integer."""
-    settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token", "LLM_MODEL": "model", "LLM_TIMEOUT": timeout}
+    settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token", "LLM_MODEL": "model", "LLM_TIMEOUT": timeout, "CACHE_DIR": tmp_path / "cache"}
 
     with pytest.raises(ValueError, match="Invalid LLM_TIMEOUT"):
-        LLMPipeline(make_crawler(settings))
+        SummarizeText(make_crawler(settings))
 
 
-def test__llm_pipeline_creates_connector_and_configures_litellm() -> None:
+def test__llm_pipeline_creates_connector_and_configures_litellm(tmp_path: Path) -> None:
     """Configured LLM settings are passed to LLMConnector."""
-    settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token", "LLM_MODEL": "model", "LLM_TIMEOUT": 30}
+    settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token", "LLM_MODEL": "model", "LLM_TIMEOUT": 30, "CACHE_DIR": tmp_path / "cache"}
     with patch("pazufa_scraper_be.pipelines.documents.summarize_text.LLMConnector") as connector:
-        pipeline = LLMPipeline(make_crawler(settings))
+        pipeline = SummarizeText(make_crawler(settings))
 
     assert pipeline.llm_connector is connector.return_value
     connector.assert_called_once_with(model="model", api_key="token", timeout_seconds=30)

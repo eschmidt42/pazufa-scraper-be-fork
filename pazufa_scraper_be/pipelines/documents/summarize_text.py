@@ -9,14 +9,14 @@ from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.pardok import AnyGesetzDokument, DrsDokument, GesetzVorgang, GVBlDokument
 from pazufa_scraper_be.pardok.dokument import DeskTitelSbMixin, Protokoll
 from pazufa_scraper_be.pipeline_guards import vorgang_guard
-from pazufa_scraper_be.pipelines.common import BasePipeline, CachePipeline, StatsPipeline
+from pazufa_scraper_be.pipelines.common import CachePipeline, StatsPipeline
 from pazufa_scraper_be.pipelines.stats_counter import LLMCounter, SummaryCounter
 
 logger = logging.getLogger(__name__)
 
 
-class LLMPipeline(BasePipeline):
-    """Configure document summarization from crawler settings."""
+class SummarizeText(CachePipeline, StatsPipeline):
+    """Pipeline that summarizes extracted document text via an LLM."""
 
     _llm_token: Any
     llm_model_name: Any
@@ -50,10 +50,6 @@ class LLMPipeline(BasePipeline):
         else:
             msg = "LLM_TOKEN is not set. Skipping Document summarization."
             logger.info(msg)
-
-
-class SummarizeText(CachePipeline, LLMPipeline, StatsPipeline):
-    """Pipeline that summarizes extracted document text via an LLM."""
 
     async def summarize(self: Self, dokument: AnyGesetzDokument, cache: Cache) -> str | None:
         """Summarize extracted document text via the LLM connector, dispatching by document type."""
