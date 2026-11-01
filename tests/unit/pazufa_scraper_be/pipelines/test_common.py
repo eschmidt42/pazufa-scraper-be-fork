@@ -13,7 +13,6 @@ from scrapy.statscollectors import StatsCollector
 from pazufa_scraper_be.constants import DOK_BASE_URL
 from pazufa_scraper_be.pardok import GesetzVorgang, PlPrDokument
 from pazufa_scraper_be.pipelines.common import (
-    ApiPipeline,
     BasePipeline,
     CachePipeline,
     LLMPipeline,
@@ -152,45 +151,6 @@ def test__cache_pipeline_accepts_additional_url(tmp_path: Path, plpr_data: dict)
 
     result = pipeline.get_cache(document, additional_url)
     assert result
-
-
-def test__api_pipeline_requires_scraper_uuid() -> None:
-    """ApiPipeline requires the scraper UUID setting."""
-    with pytest.raises(ValueError, match="Missing SCRAPER_UUID"):
-        ApiPipeline(make_crawler({"WAHLPERIODE": WAHLPERIODE}))
-
-
-def test__api_pipeline_requires_api_url_when_token_is_set() -> None:
-    """An API token requires an API URL."""
-    with pytest.raises(ValueError, match="API_URL setting is required"):
-        ApiPipeline(make_crawler({"WAHLPERIODE": WAHLPERIODE, "API_TOKEN": "token", "SCRAPER_UUID": "uuid"}))
-
-
-def test__api_pipeline_without_token_has_no_client(caplog: pytest.LogCaptureFixture) -> None:
-    """Without a token, API submission is disabled."""
-    with caplog.at_level(logging.INFO):
-        pipeline = ApiPipeline(make_crawler({"WAHLPERIODE": WAHLPERIODE, "SCRAPER_UUID": "uuid"}))
-
-    assert pipeline.get_client() is None
-    assert "API_TOKEN is not set" in caplog.text
-
-
-def test__api_pipeline_creates_authenticated_client() -> None:
-    """Configured API credentials are passed to AuthenticatedClient."""
-    settings = {"WAHLPERIODE": WAHLPERIODE, "API_URL": "https://api.example", "API_TOKEN": "test-value", "SCRAPER_UUID": "uuid"}
-    with patch("pazufa_scraper_be.pipelines.common.AuthenticatedClient") as client:
-        pipeline = ApiPipeline(make_crawler(settings))
-
-        result = pipeline.get_client()
-
-    assert result is client.return_value
-    client.assert_called_once()
-    assert client.call_args.kwargs == {
-        "base_url": "https://api.example",
-        "token": "test-value",
-        "prefix": "",
-        "auth_header_name": "X-API-Key",
-    }
 
 
 def test__llm_pipeline_without_token_skips_connector(caplog: pytest.LogCaptureFixture) -> None:

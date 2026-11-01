@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Any, Self
 
 import litellm
-from pazufa_corelib.api_client import AuthenticatedClient
 from pazufa_corelib.llm import LLMConnector
 from pydantic import HttpUrl
 from scrapy.crawler import Crawler
@@ -127,42 +126,6 @@ class CachePipeline(BasePipeline):
 
         cache_name = Path(document.art).joinpath(*Path(str(document_url).removeprefix(f"{DOK_BASE_URL}/{self.wahlperiode}/")).with_suffix("").parts[1:])
         return Cache(base_dir=self._dok_cache_dir, name=str(cache_name))
-
-
-class ApiPipeline(BasePipeline):
-    """Configure API submission from crawler settings."""
-
-    _api_url: Any
-    _api_token: Any
-    _scraper_uuid: Any
-
-    def init(self: Self) -> None:
-        """Load and validate API credentials and settings."""
-        super().init()
-
-        self._api_url = self.crawler.settings.get("API_URL", None)
-        self._api_token = self.crawler.settings.get("API_TOKEN", None)
-        self._scraper_uuid = self.crawler.settings.get("SCRAPER_UUID", None)
-
-        if self._scraper_uuid is None:
-            msg = "Missing SCRAPER_UUID setting."
-            raise ValueError(msg)
-
-        if self._api_token is not None:
-            if self._api_url is None:
-                msg = "If API_TOKEN is set, API_URL setting is required."
-                raise ValueError(msg)
-
-        else:
-            msg = "API_TOKEN is not set. Will not submit to backend."
-            logger.info(msg)
-
-    def get_client(self: Self) -> AuthenticatedClient | None:
-        """Return an authenticated backend client when configured."""
-        if self._api_token is not None:
-            return AuthenticatedClient(base_url=self._api_url, token=self._api_token, prefix="", auth_header_name="X-API-Key")
-
-        return None
 
 
 class LLMPipeline(BasePipeline):

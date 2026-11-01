@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from pathlib import Path
@@ -25,6 +26,8 @@ from scrapy.statscollectors import StatsCollector
 from pazufa_scraper_be.constants import SUBMISSION_ERROR_GRACE_PERIOD_DAYS
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 from pazufa_scraper_be.pipelines.submit_vorgang import SubmitVorgang
+
+WAHLPERIODE = 19
 
 
 @pytest.fixture
@@ -57,7 +60,7 @@ def submit_pipeline(tmp_path: Path) -> SubmitVorgang:
         Spider,
         Settings(
             {
-                "WAHLPERIODE": 19,
+                "WAHLPERIODE": WAHLPERIODE,
                 "API_URL": "https://api.example.com",
                 "API_TOKEN": "test-token",
                 "SCRAPER_UUID": "12345678-1234-5678-1234-567812345678",
@@ -74,6 +77,52 @@ def _mock_client() -> MagicMock:
     client.__aenter__ = AsyncMock(return_value=client)
     client.__aexit__ = AsyncMock(return_value=False)
     return client
+
+
+def make_crawler(settings: dict | None = None, stats: StatsCollector | None = None) -> Crawler:
+    """Create a minimal crawler double."""
+    crawler = Crawler(Spider, Settings(settings or {}))
+    crawler.stats = stats or StatsCollector(crawler)
+    return crawler
+
+
+def test__api_pipeline_requires_scraper_uuid() -> None:
+    """ApiPipeline requires the scraper UUID setting."""
+    with pytest.raises(ValueError, match="Missing SCRAPER_UUID"):
+        SubmitVorgang(make_crawler({"WAHLPERIODE": WAHLPERIODE}))
+
+
+def test__api_pipeline_requires_api_url_when_token_is_set() -> None:
+    """An API token requires an API URL."""
+    with pytest.raises(ValueError, match="API_URL setting is required"):
+        SubmitVorgang(make_crawler({"WAHLPERIODE": WAHLPERIODE, "API_TOKEN": "token", "SCRAPER_UUID": "uuid"}))
+
+
+def test__api_pipeline_without_token_has_no_client(caplog: pytest.LogCaptureFixture) -> None:
+    """Without a token, API submission is disabled."""
+    with caplog.at_level(logging.INFO):
+        pipeline = SubmitVorgang(make_crawler({"WAHLPERIODE": WAHLPERIODE, "SCRAPER_UUID": "uuid"}))
+
+    assert pipeline.get_client() is None
+    assert "API_TOKEN is not set" in caplog.text
+
+
+def test__api_pipeline_creates_authenticated_client() -> None:
+    """Configured API credentials are passed to AuthenticatedClient."""
+    settings = {"WAHLPERIODE": WAHLPERIODE, "API_URL": "https://api.example", "API_TOKEN": "test-value", "SCRAPER_UUID": "uuid"}
+    with patch("pazufa_scraper_be.pipelines.submit_vorgang.AuthenticatedClient") as client:
+        pipeline = SubmitVorgang(make_crawler(settings))
+
+        result = pipeline.get_client()
+
+    assert result is client.return_value
+    client.assert_called_once()
+    assert client.call_args.kwargs == {
+        "base_url": "https://api.example",
+        "token": "test-value",
+        "prefix": "",
+        "auth_header_name": "X-API-Key",
+    }
 
 
 def test_submit_vorgang_rejects_unexpected_item(submit_pipeline: SubmitVorgang) -> None:
