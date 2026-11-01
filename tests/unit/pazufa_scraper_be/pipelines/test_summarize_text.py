@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -6,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pazufa_corelib.cache import Value
 from pazufa_corelib.llm import LLMProviderError
+from pydantic import HttpUrl
 from scrapy import Spider
 from scrapy.crawler import Crawler
 from scrapy.exceptions import DropItem
@@ -13,9 +15,20 @@ from scrapy.settings import Settings
 from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.cache import Cache, Key
-from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang
-from pazufa_scraper_be.pipelines.documents.summarize_text import SummarizeText
+from pazufa_scraper_be.constants import DOK_BASE_URL
+from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang, PlPrDokument
+from pazufa_scraper_be.pipelines.common import CachePipeline
+from pazufa_scraper_be.pipelines.documents.summarize_text import LLMPipeline, SummarizeText
 from pazufa_scraper_be.pipelines.stats_counter import LLMCounter, SummaryCounter
+
+WAHLPERIODE = 19
+
+
+def make_crawler(settings: dict | None = None, stats: StatsCollector | None = None) -> Crawler:
+    """Create a minimal crawler double."""
+    crawler = Crawler(Spider, Settings(settings or {}))
+    crawler.stats = stats or StatsCollector(crawler)
+    return crawler
 
 
 @pytest.fixture
@@ -40,7 +53,7 @@ def summarize_pipeline(tmp_path: Path) -> tuple[SummarizeText, MagicMock]:
     )
     crawler.stats = StatsCollector(crawler)
 
-    with patch("pazufa_scraper_be.pipelines.common.LLMConnector", return_value=connector):
+    with patch("pazufa_scraper_be.pipelines.documents.summarize_text.LLMConnector", return_value=connector):
         pipeline = SummarizeText(crawler)
 
     return pipeline, connector
@@ -256,3 +269,49 @@ def test_summarize_pipeline_marks_provider_failure_ignored(
     assert cache[Key.SUMMARY_IGNORE] == "LLMProviderError('provider unavailable')"
     assert Key.SUMMARY not in cache
     assert pipeline.stats.get_value(LLMCounter.SUMMARIZE_FAILED_PROVIDER.value) == 1
+
+
+def test__cache_pipeline_accepts_additional_url(tmp_path: Path, plpr_data: dict) -> None:
+    """Additional document URLs use the same cache path logic."""
+    additional_url = HttpUrl(f"{DOK_BASE_URL}/19/19/124.pdf")
+    pipeline = CachePipeline(make_crawler({"WAHLPERIODE": WAHLPERIODE, "CACHE_DIR": tmp_path / "cache"}))
+    document = PlPrDokument.model_validate({**plpr_data, "additional_urls": [str(additional_url)]})
+
+    result = pipeline.get_cache(document, additional_url)
+    assert result
+
+
+def test__llm_pipeline_without_token_skips_connector(caplog: pytest.LogCaptureFixture) -> None:
+    """Without an LLM token, summarization is disabled."""
+    with caplog.at_level(logging.INFO):
+        pipeline = LLMPipeline(make_crawler({"WAHLPERIODE": WAHLPERIODE}))
+
+    assert pipeline.llm_connector is None
+    assert "LLM_TOKEN is not set" in caplog.text
+
+
+def test__llm_pipeline_requires_model_when_token_is_set() -> None:
+    """An LLM token requires a model name."""
+    settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token"}
+
+    with pytest.raises(ValueError, match="LLM_MODEL setting is required"):
+        LLMPipeline(make_crawler(settings))
+
+
+@pytest.mark.parametrize("timeout", [0, -1])
+def test__llm_pipeline_requires_positive_timeout(timeout: int) -> None:
+    """LLM timeout must be a positive integer."""
+    settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token", "LLM_MODEL": "model", "LLM_TIMEOUT": timeout}
+
+    with pytest.raises(ValueError, match="Invalid LLM_TIMEOUT"):
+        LLMPipeline(make_crawler(settings))
+
+
+def test__llm_pipeline_creates_connector_and_configures_litellm() -> None:
+    """Configured LLM settings are passed to LLMConnector."""
+    settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token", "LLM_MODEL": "model", "LLM_TIMEOUT": 30}
+    with patch("pazufa_scraper_be.pipelines.documents.summarize_text.LLMConnector") as connector:
+        pipeline = LLMPipeline(make_crawler(settings))
+
+    assert pipeline.llm_connector is connector.return_value
+    connector.assert_called_once_with(model="model", api_key="token", timeout_seconds=30)

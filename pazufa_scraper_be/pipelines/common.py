@@ -1,10 +1,8 @@
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Self
+from typing import Self
 
-import litellm
-from pazufa_corelib.llm import LLMConnector
 from pydantic import HttpUrl
 from scrapy.crawler import Crawler
 from scrapy.statscollectors import StatsCollector, StatsT
@@ -126,40 +124,3 @@ class CachePipeline(BasePipeline):
 
         cache_name = Path(document.art).joinpath(*Path(str(document_url).removeprefix(f"{DOK_BASE_URL}/{self.wahlperiode}/")).with_suffix("").parts[1:])
         return Cache(base_dir=self._dok_cache_dir, name=str(cache_name))
-
-
-class LLMPipeline(BasePipeline):
-    """Configure document summarization from crawler settings."""
-
-    _llm_token: Any
-    llm_model_name: Any
-    llm_connector: LLMConnector | None
-
-    def init(self: Self) -> None:
-        """Load and validate LLM settings and initialize the connector."""
-        super().init()
-
-        self._llm_token = self.crawler.settings.get("LLM_TOKEN", None)
-        self.llm_model_name = self.crawler.settings.get("LLM_MODEL", None)
-        self.llm_connector = None
-
-        if self._llm_token is not None:
-            if self.llm_model_name is None:
-                msg = "If LLM_TOKEN is set, LLM_MODEL setting is required."
-                raise ValueError(msg)
-
-            logging.getLogger("LiteLLM").setLevel(logging.FATAL)
-            litellm.suppress_debug_info = True
-
-            logging.getLogger("pazufa_corelib.llm.llm_connector").setLevel(logging.FATAL)
-
-            llm_timeout = self.crawler.settings.getint("LLM_TIMEOUT")
-            if not isinstance(llm_timeout, int) or llm_timeout <= 0:
-                msg = "Invalid LLM_TIMEOUT setting, must but integer greater than 0."
-                raise ValueError(msg)
-
-            self.llm_connector = LLMConnector(model=self.llm_model_name, api_key=self._llm_token, timeout_seconds=llm_timeout)
-
-        else:
-            msg = "LLM_TOKEN is not set. Skipping Document summarization."
-            logger.info(msg)
