@@ -8,7 +8,7 @@ from .documents import (
     SummarizeText,
     SummarizeText2,
 )
-from .handle_errors import HandleErrors, HandleErrors2
+from .handle_errors import HandleErrors2
 from .submit_vorgang import SubmitVorgang, SubmitVorgang2
 
 __all__ = [
@@ -18,7 +18,6 @@ __all__ = [
     "DownloadDocuments2",
     "ExtractText",
     "ExtractText2",
-    "HandleErrors",
     "HandleErrors2",
     "PrepareDocumentUrls2",
     "SubmitVorgang",
