@@ -1,6 +1,7 @@
 from .build_vorgang.build_vorgang import BuildPaZuFaVorgang, BuildPaZuFaVorgang2
 from .documents import (
     DownloadDocuments,
+    DownloadDocuments2,
     ExtractText,
     PrepareDocumentUrls,
     PrepareDocumentUrls2,
@@ -13,6 +14,7 @@ __all__ = [
     "BuildPaZuFaVorgang",
     "BuildPaZuFaVorgang2",
     "DownloadDocuments",
+    "DownloadDocuments2",
     "ExtractText",
     "HandleErrors",
     "HandleErrors2",

@@ -17,7 +17,7 @@ from pazufa_scraper_be.extensions.mattermost import MattermostNotifier
 from pazufa_scraper_be.extensions.temp_error_dir import TempErrorDirectory
 from pazufa_scraper_be.pipelines import (
     BuildPaZuFaVorgang2,
-    DownloadDocuments,
+    DownloadDocuments2,
     ExtractText,
     HandleErrors2,
     PrepareDocumentUrls2,
@@ -72,7 +72,7 @@ ITEM_PIPELINES = {
     HandleErrors2: 99,
     # NOTE: Pipelines with >= 100 only get properly parsed items.
     PrepareDocumentUrls2: 100,
-    DownloadDocuments: 110,
+    DownloadDocuments2: 110,
     ExtractText: 120,
     SummarizeText: 130,
     BuildPaZuFaVorgang2: 999,
