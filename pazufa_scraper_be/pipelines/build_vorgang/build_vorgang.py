@@ -33,10 +33,11 @@ from pazufa_scraper_be.pipelines.build_vorgang.utils import (
     get_vorgang_schlagworte,
     uniqify,
 )
-from pazufa_scraper_be.pipelines.common import CachePipeline, StatsPipeline
+from pazufa_scraper_be.pipelines.common import CachePipeline, DocumentCacheFactory, StatsPipeline, StatsReporter, get_wahlperiode
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 
 if TYPE_CHECKING:
+    from scrapy.crawler import Crawler
     from scrapy.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -244,5 +245,148 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
     def _empty_dok_containers_guard(self, vorgang: GesetzVorgang, dok_containers: list[DokumentContainer]) -> None:
         if len(dok_containers) == 0:
             self.increment_stats(VorgangCounter.DROP_NO_STATIONS)
+            msg = f"[{vorgang.id}]: Could not create any Stations."
+            raise DropItem(msg)
+
+
+class BuildPaZuFaVorgang2:
+    """Pipeline that converts a GesetzVorgang into a PaZuFa Vorgang API model."""
+
+    crawler: Crawler
+    wahlperiode: int
+    _cache_factory: DocumentCacheFactory
+    _stats: StatsReporter
+
+    @classmethod
+    def from_crawler(cls, crawler: Crawler) -> BuildPaZuFaVorgang2:
+        """Create the pipeline with dependencies initialized from the crawler."""
+        return cls(
+            crawler=crawler, wahlperiode=get_wahlperiode(crawler), cache_factory=DocumentCacheFactory.from_crawler(crawler), stats=StatsReporter(crawler.stats)
+        )
+
+    def __init__(self, crawler: Crawler, wahlperiode: int, cache_factory: DocumentCacheFactory, stats: StatsReporter) -> None:
+        """Initialize the pipeline with crawler, election period, cache factory, and stats."""
+        self.crawler = crawler
+        self.wahlperiode = wahlperiode
+        self._cache_factory = cache_factory
+        self._stats = stats
+
+    async def process_item(self: Self, vorgang: GesetzVorgang) -> PaZuFaVorgang:
+        """Build and return a PaZuFa Vorgang from a parsed GesetzVorgang."""
+        vorgang_guard(vorgang)
+        self._gvbl_guard(vorgang)
+
+        dok_containers = self._build_dok_containers(vorgang)
+
+        self._empty_dok_containers_guard(vorgang, dok_containers)
+
+        stationen = self._build_stationen(dok_containers)
+
+        dokument = stationen[0].dokumente[0]
+        if isinstance(dokument, Dokument):
+            titel = dokument.titel
+            initiatoren = dokument.autoren
+
+        else:
+            msg = f"[{vorgang.id}]: Could not create titel and autoren."
+            raise DropItem(msg)
+
+        vorgang_schlagworte = get_vorgang_schlagworte(vorgang)
+        document_schlagworte = get_document_schlagworte(dok_containers[0].pardok)
+
+        return Vorgang(
+            api_id=_create_api_id(self.crawler.settings, vorgang.id),
+            titel=titel,
+            wahlperiode=self.wahlperiode,
+            typ=Vorgangstyp.GG_LAND_PARL,
+            initiatoren=initiatoren,
+            stationen=stationen,
+            ids=_get_ids(vorgang=vorgang),
+            links=_get_links(vorgang=vorgang),
+            sachgebiete=_get_sachgebiete(vorgang=vorgang),
+            ressort=_get_ressort(),
+            schlagworte=_merge_schlagworte(document_schlagworte=document_schlagworte, vorgang_schlagworte=vorgang_schlagworte),
+            # NOTE: Following should be revisited
+            verfassungsaendernd=False,
+            kurztitel=UNSET,
+            lobbyregister=UNSET,
+        )
+
+    def _build_stationen(self, dok_containers: list[DokumentContainer]) -> list[Station]:
+
+        stationen: list[Station] = []
+        for dok_container in dok_containers:
+            station_typ, (gremium, gremium_federf) = get_station_typ_and_gremium(dok_container)
+
+            zp_start, zp_modifiziert = get_station_zeitpunkte(dok_container)
+
+            api_id = _create_api_id(self.crawler.settings, f"Station-{dok_container.pardok.id}")
+
+            dokumente = cast("list[Dokument | UUID]", dok_container.pazufa)
+
+            station = Station(
+                api_id=api_id,
+                zp_start=zp_start,
+                zp_modifiziert=zp_modifiziert,
+                gremium=gremium,
+                typ=station_typ,
+                dokumente=dokumente,
+                titel=dok_container.pardok.typ_l or UNSET,
+                gremium_federf=gremium_federf,
+                # NOTE: Following should be revisited
+                link=UNSET,
+                additional_links=UNSET,
+                stellungnahmen=UNSET,
+            )
+            stationen.append(station)
+
+            abstract = dok_container.pardok.abstract
+
+            if abstract is None:
+                continue
+
+            new_station = check_and_create_vote_outcome_station(station=station, dok_abstract=abstract)
+
+            if new_station:
+                new_station.api_id = _create_api_id(self.crawler.settings, f"Station-{dok_container.pardok.id}-{new_station.typ}")
+
+                stationen.append(new_station)
+
+        return stationen
+
+    def _build_dok_containers(self, vorgang: GesetzVorgang) -> list[DokumentContainer]:
+
+        dok_containers: list[DokumentContainer] = []
+
+        for pardok in vorgang.dokumente:
+            pazufa_documents: list[Dokument] = []
+
+            for dokument_url in pardok.all_urls:
+                cache = self._cache_factory.for_document(document=pardok, url=dokument_url)
+
+                pazufa_dokument = build_pazufa_dokument(dokument=pardok, cache=cache, url=dokument_url)
+
+                if pazufa_dokument:
+                    pazufa_documents.append(pazufa_dokument)
+
+            if len(pazufa_documents) > 0:
+                dok_containers.append(DokumentContainer(pardok, pazufa_documents))
+
+        if len(dok_containers) == 0:
+            self._stats.increment(VorgangCounter.DROP_NO_DOCUMENTS)
+            msg = f"[{vorgang.id}]: Could not create any Dokument from Vorgang."
+            raise DropItem(msg)
+
+        return apply_rules(pardok_pazufa_doks=dok_containers, rules=RULES)
+
+    def _gvbl_guard(self, vorgang: GesetzVorgang) -> None:
+        if len(vorgang.dokumente) == 1 and isinstance(vorgang.dokumente[0], GVBlDokument):
+            self._stats.increment(VorgangCounter.DROP_OUT_OF_SCOPE)
+            msg = f"[{vorgang.id}]: Out of scope. Single Gesetz- und Verordnungsblatt."
+            raise DropItem(msg, log_level="INFO")
+
+    def _empty_dok_containers_guard(self, vorgang: GesetzVorgang, dok_containers: list[DokumentContainer]) -> None:
+        if len(dok_containers) == 0:
+            self._stats.increment(VorgangCounter.DROP_NO_STATIONS)
             msg = f"[{vorgang.id}]: Could not create any Stations."
             raise DropItem(msg)

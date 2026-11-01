@@ -16,7 +16,7 @@ from pazufa_scraper_be.constants import CACHE_DIR_PATH
 from pazufa_scraper_be.extensions.mattermost import MattermostNotifier
 from pazufa_scraper_be.extensions.temp_error_dir import TempErrorDirectory
 from pazufa_scraper_be.pipelines import (
-    BuildPaZuFaVorgang,
+    BuildPaZuFaVorgang2,
     DownloadDocuments,
     ExtractText,
     HandleErrors2,
@@ -75,7 +75,7 @@ ITEM_PIPELINES = {
     DownloadDocuments: 110,
     ExtractText: 120,
     SummarizeText: 130,
-    BuildPaZuFaVorgang: 999,
+    BuildPaZuFaVorgang2: 999,
     SubmitVorgang: 1000,
 }
 

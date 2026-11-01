@@ -97,6 +97,46 @@ class StatsPipeline(BasePipeline):
         self.stats.inc_value(key)
 
 
+def get_cache_dir(crawler: Crawler) -> Path:
+    """Return the configured cache directory for a crawler."""
+    cache_dir = crawler.settings.get("CACHE_DIR")
+
+    if not isinstance(cache_dir, (str, Path)):
+        msg = "Missing CACHE_DIR setting."
+        raise TypeError(msg)
+
+    return Path(cache_dir)
+
+
+class DocumentCacheFactory:
+    """Create document caches rooted in the cache directory for one election period."""
+
+    @classmethod
+    def from_crawler(cls, crawler: Crawler) -> "DocumentCacheFactory":
+        """Create a factory using the cache directory and election period from the crawler."""
+        cache_dir = get_cache_dir(crawler)
+
+        wahlperiode = get_wahlperiode(crawler)
+
+        return cls(cache_dir=cache_dir, wahlperiode=wahlperiode)
+
+    def __init__(self, *, cache_dir: Path, wahlperiode: int) -> None:
+        """Initialize the factory for the given cache directory and election period."""
+        self._wahlperiode = wahlperiode
+        self._dok_cache_dir = cache_dir / str(wahlperiode) / DOK_CACHE_SUB_DIR_PATH
+
+    def for_document(self, document: AnyGesetzDokument, url: HttpUrl) -> Cache:
+        """Return a cache for a document URL."""
+        if url != document.lok_url and document.additional_urls and url not in document.additional_urls:
+            msg = f"[{document.vorgang.id} - {document.id}]: Did not setup dokument cache because given URL is unknown: {url}"
+            raise ValueError(msg)
+
+        relative_path = Path(str(url).removeprefix(f"{DOK_BASE_URL}/{self._wahlperiode}/")).with_suffix("")
+        cache_name = Path(document.art).joinpath(*relative_path.parts[1:])
+
+        return Cache(base_dir=self._dok_cache_dir, name=str(cache_name))
+
+
 class CachePipeline(BasePipeline):
     """Provide helpers for caching document downloads."""
 

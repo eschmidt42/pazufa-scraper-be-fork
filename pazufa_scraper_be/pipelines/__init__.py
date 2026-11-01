@@ -1,4 +1,4 @@
-from .build_vorgang.build_vorgang import BuildPaZuFaVorgang
+from .build_vorgang.build_vorgang import BuildPaZuFaVorgang, BuildPaZuFaVorgang2
 from .documents import (
     DownloadDocuments,
     ExtractText,
@@ -11,6 +11,7 @@ from .submit_vorgang import SubmitVorgang
 
 __all__ = [
     "BuildPaZuFaVorgang",
+    "BuildPaZuFaVorgang2",
     "DownloadDocuments",
     "ExtractText",
     "HandleErrors",
