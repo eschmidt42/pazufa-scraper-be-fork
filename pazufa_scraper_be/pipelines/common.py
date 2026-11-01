@@ -77,26 +77,6 @@ class BasePipeline(ABC):
         ...
 
 
-class StatsPipeline(BasePipeline):
-    """Adds convenience method to log PaZuFa stats.
-
-    Reference: https://docs.scrapy.org/en/latest/topics/stats.html
-    """
-
-    stats: StatsCollector
-
-    def init(self: Self) -> None:
-        """Expose the crawler's stats collector."""
-        super().init()
-
-        self.stats = self.crawler.stats
-
-    def increment_stats(self: Self, counter: StatsCounter | str) -> None:
-        """Increment a named stats counter."""
-        key = counter.value if isinstance(counter, StatsCounter) else counter
-        self.stats.inc_value(key)
-
-
 def get_cache_dir(crawler: Crawler) -> Path:
     """Return the configured cache directory for a crawler."""
     cache_dir = crawler.settings.get("CACHE_DIR")

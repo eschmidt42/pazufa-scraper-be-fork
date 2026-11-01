@@ -8,7 +8,6 @@ from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.pipelines.common import (
     BasePipeline,
-    StatsPipeline,
     StatsReporter,
     get_wahlperiode,
 )
@@ -72,21 +71,6 @@ def test__base_pipeline_raises_when_wahlperiode_is_none() -> None:
     crawler = make_crawler()
     with patch.object(crawler.settings, "getint", return_value=None), pytest.raises(ValueError, match="Missing WAHLPERIODE"):
         ConcreteBasePipeline(crawler)
-
-
-def test__stats_pipeline_increments_enum_and_string_counters() -> None:
-    """StatsPipeline supports StatsCounter values and literal keys."""
-    crawler = make_crawler({"WAHLPERIODE": WAHLPERIODE})
-    stats = StatsCollector(crawler)
-    crawler.stats = stats
-    pipeline = StatsPipeline(crawler)
-
-    with patch.object(StatsCollector, "inc_value") as increment:
-        pipeline.increment_stats(DokumentCounter.CACHE_HIT)
-        pipeline.increment_stats("custom/key")
-
-    increment.assert_any_call(DokumentCounter.CACHE_HIT.value)
-    increment.assert_any_call("custom/key")
 
 
 def test_stats_reporter_increments_enum_and_string_counters() -> None:
