@@ -19,7 +19,7 @@ from pazufa_scraper_be.pipelines import (
     BuildPaZuFaVorgang,
     DownloadDocuments,
     ExtractText,
-    HandleErrors,
+    HandleErrors2,
     PrepareDocumentUrls2,
     SubmitVorgang,
     SummarizeText,
@@ -69,7 +69,7 @@ TELNETCONSOLE_ENABLED = False
 # Configure item pipelines
 ITEM_PIPELINES = {
     # NOTE: Pipelines with <100 get proper items or dicts, which contain data an error.
-    HandleErrors: 99,
+    HandleErrors2: 99,
     # NOTE: Pipelines with >= 100 only get properly parsed items.
     PrepareDocumentUrls2: 100,
     DownloadDocuments: 110,

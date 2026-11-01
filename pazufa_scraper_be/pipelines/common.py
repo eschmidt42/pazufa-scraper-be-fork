@@ -8,7 +8,7 @@ from pazufa_corelib.api_client import AuthenticatedClient
 from pazufa_corelib.llm import LLMConnector
 from pydantic import HttpUrl
 from scrapy.crawler import Crawler
-from scrapy.statscollectors import StatsCollector
+from scrapy.statscollectors import StatsCollector, StatsT
 
 from pazufa_scraper_be.cache import Cache
 from pazufa_scraper_be.constants import DOK_BASE_URL, DOK_CACHE_SUB_DIR_PATH
@@ -39,6 +39,10 @@ class StatsReporter:
     ) -> object:
         """Return the value of the *key* stat, or *default* if it is not set."""
         return self._stats.get_value(key, default)
+
+    def get_stats(self) -> StatsT:
+        """Return all stats as a dict."""
+        return self._stats.get_stats()
 
 
 def get_wahlperiode(crawler: Crawler) -> int:
