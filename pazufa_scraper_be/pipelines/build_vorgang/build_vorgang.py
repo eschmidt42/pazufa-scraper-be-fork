@@ -14,7 +14,7 @@ from scrapy.exceptions import DropItem
 from pazufa_scraper_be.constants import ANGENOMMEN, VERTAGT
 from pazufa_scraper_be.pardok import APrDokument, DokTyp, DrsDokument, GesetzVorgang, GVBlDokument, PlPrDokument
 from pazufa_scraper_be.pipeline_guards import vorgang_guard
-from pazufa_scraper_be.pipelines.build_vorgang import build_pazufa_dokument
+from pazufa_scraper_be.pipelines.build_vorgang.build_pazufa_dokument import build_pazufa_dokument
 from pazufa_scraper_be.pipelines.build_vorgang.rules import (
     BackwardMergeRule,
     DropRule,
