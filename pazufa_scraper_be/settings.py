@@ -20,7 +20,7 @@ from pazufa_scraper_be.pipelines import (
     DownloadDocuments,
     ExtractText,
     HandleErrors,
-    PrepareDocumentUrls,
+    PrepareDocumentUrls2,
     SubmitVorgang,
     SummarizeText,
 )
@@ -71,7 +71,7 @@ ITEM_PIPELINES = {
     # NOTE: Pipelines with <100 get proper items or dicts, which contain data an error.
     HandleErrors: 99,
     # NOTE: Pipelines with >= 100 only get properly parsed items.
-    PrepareDocumentUrls: 100,
+    PrepareDocumentUrls2: 100,
     DownloadDocuments: 110,
     ExtractText: 120,
     SummarizeText: 130,
