@@ -73,7 +73,7 @@ def test_prepare_document_urls2_raises_when_engine_is_missing(
     item = GesetzVorgang.model_validate(base_vorgang_data)
 
     with (
-        patch.object(prepare_document_urls_pipeline2, "_engine", None),
+        patch.object(prepare_document_urls_pipeline2, "_crawler", MagicMock(engine=None)),
         pytest.raises(ValueError, match=r"crawler\.engine is None"),
     ):
         asyncio.run(prepare_document_urls_pipeline2.process_item(item))
