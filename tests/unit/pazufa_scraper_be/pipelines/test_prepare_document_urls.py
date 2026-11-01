@@ -18,7 +18,7 @@ from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
 
 
 @pytest.fixture
-def prepare_document_urls_pipeline2() -> PrepareDocumentUrls:
+def prepare_document_urls_pipeline() -> PrepareDocumentUrls:
     """Create a PrepareDocumentUrls pipeline with a minimal crawler."""
     crawler = Crawler(Spider, Settings({"WAHLPERIODE": 19}))
     crawler.stats = StatsCollector(crawler)
@@ -26,33 +26,33 @@ def prepare_document_urls_pipeline2() -> PrepareDocumentUrls:
     return PrepareDocumentUrls.from_crawler(crawler)
 
 
-def test_prepare_document_urls2_drops_unexpected_item(
-    prepare_document_urls_pipeline2: PrepareDocumentUrls,
+def test_prepare_document_urls_drops_unexpected_item(
+    prepare_document_urls_pipeline: PrepareDocumentUrls,
 ) -> None:
     """An unexpected item type is dropped."""
     with pytest.raises(DropItem, match="Expected GesetzVorgang object but got str"):
-        asyncio.run(prepare_document_urls_pipeline2.process_item("unexpected"))  # ty: ignore[invalid-argument-type]
+        asyncio.run(prepare_document_urls_pipeline.process_item("unexpected"))  # ty: ignore[invalid-argument-type]
 
 
-def test_prepare_document_urls2_raises_when_engine_is_missing(
+def test_prepare_document_urls_raises_when_engine_is_missing(
     base_vorgang_data: dict[str, Any],
-    prepare_document_urls_pipeline2: PrepareDocumentUrls,
+    prepare_document_urls_pipeline: PrepareDocumentUrls,
 ) -> None:
     """A missing crawler engine indicates an improperly initialized crawler."""
     item = GesetzVorgang.model_validate(base_vorgang_data)
 
     with (
-        patch.object(prepare_document_urls_pipeline2, "_crawler", MagicMock(engine=None)),
+        patch.object(prepare_document_urls_pipeline, "_crawler", MagicMock(engine=None)),
         pytest.raises(ValueError, match=r"crawler\.engine is None"),
     ):
-        asyncio.run(prepare_document_urls_pipeline2.process_item(item))
+        asyncio.run(prepare_document_urls_pipeline.process_item(item))
 
 
-def test_prepare_document_urls2_normalizes_and_prepares_document_urls(
+def test_prepare_document_urls_normalizes_and_prepares_document_urls(
     base_vorgang_data: dict[str, Any],
     plpr_data: dict[str, Any],
     apr_data: dict[str, Any],
-    prepare_document_urls_pipeline2: PrepareDocumentUrls,
+    prepare_document_urls_pipeline: PrepareDocumentUrls,
 ) -> None:
     """Incorrect URLs are corrected and missing/variant protocol URLs are prepared."""
     plpr_data = {**plpr_data, "DokNr": "19/2", "LokURL": "https://example.com/iso/h19-076-plpr.pdf"}
@@ -80,7 +80,7 @@ def test_prepare_document_urls2_normalizes_and_prepares_document_urls(
             ),
         ],
     ):
-        result = asyncio.run(prepare_document_urls_pipeline2.process_item(item))
+        result = asyncio.run(prepare_document_urls_pipeline.process_item(item))
 
     assert result is item
     corrected_plpr, missing_url_plpr, apr = item.dokumente
@@ -95,10 +95,10 @@ def test_prepare_document_urls2_normalizes_and_prepares_document_urls(
     ]
 
 
-def test_prepare_document_urls2_counts_resolver_results(
+def test_prepare_document_urls_counts_resolver_results(
     base_vorgang_data: dict[str, Any],
     plpr_data: dict[str, Any],
-    prepare_document_urls_pipeline2: PrepareDocumentUrls,
+    prepare_document_urls_pipeline: PrepareDocumentUrls,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Missing, recovered, and pruned resolver outcomes update their counters."""
@@ -128,9 +128,9 @@ def test_prepare_document_urls2_counts_resolver_results(
             side_effect=results,
         ),
     ):
-        asyncio.run(prepare_document_urls_pipeline2.process_item(item))
+        asyncio.run(prepare_document_urls_pipeline.process_item(item))
 
-    assert prepare_document_urls_pipeline2._stats.get_value(DokumentCounter.MISSING_PRIMARY.value) == 1
-    assert prepare_document_urls_pipeline2._stats.get_value(DokumentCounter.RECOVERED_FROM_ADDITIONAL.value) == 1
-    assert prepare_document_urls_pipeline2._stats.get_value(DokumentCounter.ADDITIONAL_PRUNED.value) == 1
+    assert prepare_document_urls_pipeline._stats.get_value(DokumentCounter.MISSING_PRIMARY.value) == 1
+    assert prepare_document_urls_pipeline._stats.get_value(DokumentCounter.RECOVERED_FROM_ADDITIONAL.value) == 1
+    assert prepare_document_urls_pipeline._stats.get_value(DokumentCounter.ADDITIONAL_PRUNED.value) == 1
     assert "[vorg123 - missing]: Missing URL." in caplog.text
