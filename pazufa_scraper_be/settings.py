@@ -18,7 +18,7 @@ from pazufa_scraper_be.extensions.temp_error_dir import TempErrorDirectory
 from pazufa_scraper_be.pipelines import (
     BuildPaZuFaVorgang2,
     DownloadDocuments2,
-    ExtractText,
+    ExtractText2,
     HandleErrors2,
     PrepareDocumentUrls2,
     SubmitVorgang,
@@ -73,7 +73,7 @@ ITEM_PIPELINES = {
     # NOTE: Pipelines with >= 100 only get properly parsed items.
     PrepareDocumentUrls2: 100,
     DownloadDocuments2: 110,
-    ExtractText: 120,
+    ExtractText2: 120,
     SummarizeText: 130,
     BuildPaZuFaVorgang2: 999,
     SubmitVorgang: 1000,

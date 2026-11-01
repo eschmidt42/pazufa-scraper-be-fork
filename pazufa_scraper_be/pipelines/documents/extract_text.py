@@ -3,12 +3,13 @@ from typing import Self
 
 import xberg
 from pydantic import HttpUrl
+from scrapy.crawler import Crawler
 from xberg import ExtractInput, ExtractInputKind
 
 from pazufa_scraper_be.cache import Key
 from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang
 from pazufa_scraper_be.pipeline_guards import vorgang_guard
-from pazufa_scraper_be.pipelines.common import CachePipeline, StatsPipeline
+from pazufa_scraper_be.pipelines.common import CachePipeline, DocumentCacheFactory, StatsPipeline, StatsReporter
 from pazufa_scraper_be.pipelines.stats_counter import TextCounter
 from pazufa_scraper_be.xberg_config import get_xberg_config
 
@@ -82,4 +83,56 @@ class ExtractText(CachePipeline, StatsPipeline):
 
         else:
             self.increment_stats(TextCounter.EXTRACT_DONE)
+            cache[Key.TEXT] = text
+
+
+class ExtractText2:
+    """Pipeline that extracts plain text from cached PDF documents using xberg."""
+
+    _cache_factory: DocumentCacheFactory
+    _stats: StatsReporter
+
+    @classmethod
+    def from_crawler(cls, crawler: Crawler) -> "ExtractText2":
+        """Create the pipeline with dependencies initialized from the crawler."""
+        return cls(cache_factory=DocumentCacheFactory.from_crawler(crawler), stats=StatsReporter(crawler.stats))
+
+    def __init__(self, cache_factory: DocumentCacheFactory, stats: StatsReporter) -> None:
+        """Initialize the pipeline with crawler, election period, cache factory, and stats."""
+        self._cache_factory = cache_factory
+        self._stats = stats
+
+    async def process_item(self: Self, vorgang: GesetzVorgang) -> GesetzVorgang:
+        """Extract text from cached PDFs for each document in the Vorgang."""
+        vorgang_guard(vorgang)
+
+        for dokument in vorgang.dokumente:
+            for dokument_url in dokument.all_urls:
+                await self._process_url(vorgang, dokument, dokument_url)
+
+        return vorgang
+
+    async def _process_url(self, vorgang: GesetzVorgang, dokument: AnyGesetzDokument, dokument_url: HttpUrl) -> None:
+        cache = self._cache_factory.for_document(document=dokument, url=dokument_url)
+
+        if Key.DOCUMENT not in cache:
+            return
+
+        if Key.TEXT in cache:
+            self._stats.increment(TextCounter.CACHE_HIT)
+            return
+
+        self._stats.increment(TextCounter.CACHE_MISS)
+
+        text = await extract_text_with_ocr_backup(document_bytes=cache.get_bytes(Key.DOCUMENT))
+
+        text = _text_edits(text)
+
+        if len(text) == 0:
+            self._stats.increment(TextCounter.EXTRACT_FAILED_EMPTY_TEXT)
+            msg = f"[{vorgang.id} - {dokument.id}]: No text extracted."
+            logger.warning(msg)
+
+        else:
+            self._stats.increment(TextCounter.EXTRACT_DONE)
             cache[Key.TEXT] = text
