@@ -15,7 +15,7 @@ from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang
-from pazufa_scraper_be.pipelines.build_vorgang.build_vorgang import BuildPaZuFaVorgang2
+from pazufa_scraper_be.pipelines.build_vorgang.build_vorgang import BuildPaZuFaVorgang
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 
 if TYPE_CHECKING:
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def build_pipeline2(tmp_path: Path) -> BuildPaZuFaVorgang2:
+def build_pipeline2(tmp_path: Path) -> BuildPaZuFaVorgang:
     """Create a Vorgang builder with an isolated cache and stats collector."""
     crawler = Crawler(
         Spider,
@@ -36,15 +36,15 @@ def build_pipeline2(tmp_path: Path) -> BuildPaZuFaVorgang2:
         ),
     )
     crawler.stats = StatsCollector(crawler)
-    return BuildPaZuFaVorgang2.from_crawler(crawler)
+    return BuildPaZuFaVorgang.from_crawler(crawler)
 
 
-def _cache_for_document2(pipeline: BuildPaZuFaVorgang2, document: AnyGesetzDokument) -> Cache:
+def _cache_for_document2(pipeline: BuildPaZuFaVorgang, document: AnyGesetzDokument) -> Cache:
     assert document.lok_url is not None
     return pipeline._cache_factory.for_document(document=document, url=document.lok_url)
 
 
-def test_build_pazufa_vorgang2_rejects_non_vorgang(build_pipeline2: BuildPaZuFaVorgang2) -> None:
+def test_build_pazufa_vorgang2_rejects_non_vorgang(build_pipeline2: BuildPaZuFaVorgang) -> None:
     """Items of an unexpected type are dropped."""
     invalid_item: Any = object()
 
@@ -53,7 +53,7 @@ def test_build_pazufa_vorgang2_rejects_non_vorgang(build_pipeline2: BuildPaZuFaV
 
 
 def test_build_pazufa_vorgang_builds_vorgang2_and_station(
-    build_pipeline2: BuildPaZuFaVorgang2,
+    build_pipeline2: BuildPaZuFaVorgang,
     base_vorgang_data: dict[str, Any],
     plpr_data: dict[str, Any],
 ) -> None:
@@ -90,7 +90,7 @@ def test_build_pazufa_vorgang_builds_vorgang2_and_station(
 
 
 def test_build_pazufa_vorgang2_drops_when_no_documents_can_be_built(
-    build_pipeline2: BuildPaZuFaVorgang2,
+    build_pipeline2: BuildPaZuFaVorgang,
     base_vorgang_data: dict[str, Any],
     plpr_data: dict[str, Any],
 ) -> None:
@@ -104,7 +104,7 @@ def test_build_pazufa_vorgang2_drops_when_no_documents_can_be_built(
 
 
 def test_build_pazufa_vorgang2_drops_when_rules_remove_all_stations(
-    build_pipeline2: BuildPaZuFaVorgang2,
+    build_pipeline2: BuildPaZuFaVorgang,
     base_vorgang_data: dict[str, Any],
     apr_data: dict[str, Any],
 ) -> None:
@@ -128,7 +128,7 @@ def test_build_pazufa_vorgang2_drops_when_rules_remove_all_stations(
 
 
 def test_build_pazufa_vorgang2_drops_single_gvbl_as_out_of_scope(
-    build_pipeline2: BuildPaZuFaVorgang2,
+    build_pipeline2: BuildPaZuFaVorgang,
     base_vorgang_data: dict[str, Any],
     gvbl_data: dict[str, Any],
 ) -> None:

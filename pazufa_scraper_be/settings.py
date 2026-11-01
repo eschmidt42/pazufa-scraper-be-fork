@@ -16,13 +16,13 @@ from pazufa_scraper_be.constants import CACHE_DIR_PATH
 from pazufa_scraper_be.extensions.mattermost import MattermostNotifier
 from pazufa_scraper_be.extensions.temp_error_dir import TempErrorDirectory
 from pazufa_scraper_be.pipelines import (
-    BuildPaZuFaVorgang2,
-    DownloadDocuments2,
-    ExtractText2,
-    HandleErrors2,
-    PrepareDocumentUrls2,
-    SubmitVorgang2,
-    SummarizeText2,
+    BuildPaZuFaVorgang,
+    DownloadDocuments,
+    ExtractText,
+    HandleErrors,
+    PrepareDocumentUrls,
+    SubmitVorgang,
+    SummarizeText,
 )
 
 # Arguments
@@ -69,14 +69,14 @@ TELNETCONSOLE_ENABLED = False
 # Configure item pipelines
 ITEM_PIPELINES = {
     # NOTE: Pipelines with <100 get proper items or dicts, which contain data an error.
-    HandleErrors2: 99,
+    HandleErrors: 99,
     # NOTE: Pipelines with >= 100 only get properly parsed items.
-    PrepareDocumentUrls2: 100,
-    DownloadDocuments2: 110,
-    ExtractText2: 120,
-    SummarizeText2: 130,
-    BuildPaZuFaVorgang2: 999,
-    SubmitVorgang2: 1000,
+    PrepareDocumentUrls: 100,
+    DownloadDocuments: 110,
+    ExtractText: 120,
+    SummarizeText: 130,
+    BuildPaZuFaVorgang: 999,
+    SubmitVorgang: 1000,
 }
 
 EXTENSIONS = {

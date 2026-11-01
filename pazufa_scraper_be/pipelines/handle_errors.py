@@ -8,13 +8,13 @@ from pazufa_scraper_be.pipelines.common import StatsReporter
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 
 
-class HandleErrors2:
+class HandleErrors:
     """Pipeline that reports parse errors and drops malformed items."""
 
     _stats: StatsReporter
 
     @classmethod
-    def from_crawler(cls, crawler: Crawler) -> "HandleErrors2":
+    def from_crawler(cls, crawler: Crawler) -> "HandleErrors":
         """Construct from crawler^^."""
         return cls(stats=StatsReporter(crawler.stats))
 

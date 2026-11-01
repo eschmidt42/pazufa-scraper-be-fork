@@ -13,21 +13,21 @@ from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.pardok import GesetzVorgang, PlPrDokument
 from pazufa_scraper_be.pardok.url import UrlResolution
-from pazufa_scraper_be.pipelines.documents.prepare_document_urls import PrepareDocumentUrls2
+from pazufa_scraper_be.pipelines.documents.prepare_document_urls import PrepareDocumentUrls
 from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
 
 
 @pytest.fixture
-def prepare_document_urls_pipeline2() -> PrepareDocumentUrls2:
+def prepare_document_urls_pipeline2() -> PrepareDocumentUrls:
     """Create a PrepareDocumentUrls pipeline with a minimal crawler."""
     crawler = Crawler(Spider, Settings({"WAHLPERIODE": 19}))
     crawler.stats = StatsCollector(crawler)
     crawler.engine = MagicMock()
-    return PrepareDocumentUrls2.from_crawler(crawler)
+    return PrepareDocumentUrls.from_crawler(crawler)
 
 
 def test_prepare_document_urls2_drops_unexpected_item(
-    prepare_document_urls_pipeline2: PrepareDocumentUrls2,
+    prepare_document_urls_pipeline2: PrepareDocumentUrls,
 ) -> None:
     """An unexpected item type is dropped."""
     with pytest.raises(DropItem, match="Expected GesetzVorgang object but got str"):
@@ -36,7 +36,7 @@ def test_prepare_document_urls2_drops_unexpected_item(
 
 def test_prepare_document_urls2_raises_when_engine_is_missing(
     base_vorgang_data: dict[str, Any],
-    prepare_document_urls_pipeline2: PrepareDocumentUrls2,
+    prepare_document_urls_pipeline2: PrepareDocumentUrls,
 ) -> None:
     """A missing crawler engine indicates an improperly initialized crawler."""
     item = GesetzVorgang.model_validate(base_vorgang_data)
@@ -52,7 +52,7 @@ def test_prepare_document_urls2_normalizes_and_prepares_document_urls(
     base_vorgang_data: dict[str, Any],
     plpr_data: dict[str, Any],
     apr_data: dict[str, Any],
-    prepare_document_urls_pipeline2: PrepareDocumentUrls2,
+    prepare_document_urls_pipeline2: PrepareDocumentUrls,
 ) -> None:
     """Incorrect URLs are corrected and missing/variant protocol URLs are prepared."""
     plpr_data = {**plpr_data, "DokNr": "19/2", "LokURL": "https://example.com/iso/h19-076-plpr.pdf"}
@@ -98,7 +98,7 @@ def test_prepare_document_urls2_normalizes_and_prepares_document_urls(
 def test_prepare_document_urls2_counts_resolver_results(
     base_vorgang_data: dict[str, Any],
     plpr_data: dict[str, Any],
-    prepare_document_urls_pipeline2: PrepareDocumentUrls2,
+    prepare_document_urls_pipeline2: PrepareDocumentUrls,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Missing, recovered, and pruned resolver outcomes update their counters."""

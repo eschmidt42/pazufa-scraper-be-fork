@@ -125,7 +125,7 @@ def _create_api_id(settings: Settings, station_name: str) -> UUID:
     return uuid.uuid5(settings.get("SCRAPER_UUID"), station_name)
 
 
-class BuildPaZuFaVorgang2:
+class BuildPaZuFaVorgang:
     """Pipeline that converts a GesetzVorgang into a PaZuFa Vorgang API model."""
 
     crawler: Crawler
@@ -134,7 +134,7 @@ class BuildPaZuFaVorgang2:
     _stats: StatsReporter
 
     @classmethod
-    def from_crawler(cls, crawler: Crawler) -> BuildPaZuFaVorgang2:
+    def from_crawler(cls, crawler: Crawler) -> BuildPaZuFaVorgang:
         """Create the pipeline with dependencies initialized from the crawler."""
         return cls(
             crawler=crawler, wahlperiode=get_wahlperiode(crawler), cache_factory=DocumentCacheFactory.from_crawler(crawler), stats=StatsReporter(crawler.stats)

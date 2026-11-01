@@ -78,7 +78,7 @@ def _is_in_current_wahlperiode(wahlperiode: int, vorgang: GesetzVorgang, dokumen
     return True
 
 
-class DownloadDocuments2:
+class DownloadDocuments:
     """Pipeline that downloads and caches PDF documents for each Vorgang."""
 
     crawler: Crawler
@@ -87,7 +87,7 @@ class DownloadDocuments2:
     _stats: StatsReporter
 
     @classmethod
-    def from_crawler(cls, crawler: Crawler) -> "DownloadDocuments2":
+    def from_crawler(cls, crawler: Crawler) -> "DownloadDocuments":
         """Create the pipeline with dependencies initialized from the crawler."""
         return cls(
             crawler=crawler, wahlperiode=get_wahlperiode(crawler), cache_factory=DocumentCacheFactory.from_crawler(crawler), stats=StatsReporter(crawler.stats)

@@ -19,7 +19,7 @@ from pazufa_scraper_be.constants import DOCUMENT_CHECK_MODIFIED_EVERY_DAYS
 from pazufa_scraper_be.pardok import GesetzVorgang
 from pazufa_scraper_be.pipelines.documents.download_documents import (
     LAST_MODIFIED_TIME_FORMAT,
-    DownloadDocuments2,
+    DownloadDocuments,
     _fetch_last_modified,
     _is_recheck_due,
     _reset_cache_if_file_got_modified,
@@ -39,12 +39,12 @@ def download_engine() -> MagicMock:
 
 
 @pytest.fixture
-def download_pipeline2(tmp_path: Path, download_engine: MagicMock) -> DownloadDocuments2:
+def download_pipeline2(tmp_path: Path, download_engine: MagicMock) -> DownloadDocuments:
     """Create a download pipeline with a temporary cache and mocked engine."""
     crawler = Crawler(Spider, Settings({"WAHLPERIODE": 19, "CACHE_DIR": tmp_path}))
     crawler.stats = StatsCollector(crawler)
     crawler.engine = download_engine
-    return DownloadDocuments2.from_crawler(crawler)
+    return DownloadDocuments.from_crawler(crawler)
 
 
 @pytest.fixture
@@ -53,7 +53,7 @@ def download_item(base_vorgang_data: dict[str, Any], plpr_data: dict[str, Any]) 
     return GesetzVorgang.model_validate({**base_vorgang_data, "Dokument": [{**plpr_data, "LokURL": str(DOCUMENT_URL)}]})
 
 
-def _item_cache2(pipeline: DownloadDocuments2, item: GesetzVorgang) -> Cache:
+def _item_cache2(pipeline: DownloadDocuments, item: GesetzVorgang) -> Cache:
     document = item.dokumente[0]
     assert document.lok_url is not None
     return pipeline._cache_factory.for_document(document=document, url=document.lok_url)
@@ -132,7 +132,7 @@ def test_reset_cache_if_file_got_modified_records_check_without_last_modified(tm
 
 def test_download_and_cache2_stores_document_and_metadata(
     download_item: GesetzVorgang,
-    download_pipeline2: DownloadDocuments2,
+    download_pipeline2: DownloadDocuments,
     download_engine: MagicMock,
 ) -> None:
     """A successful cache miss stores document bytes, URL, timestamps, and stats."""
@@ -163,7 +163,7 @@ def test_download_and_cache2_stores_document_and_metadata(
 
 def test_download_and_cache2_skips_cached_document(
     download_item: GesetzVorgang,
-    download_pipeline2: DownloadDocuments2,
+    download_pipeline2: DownloadDocuments,
     download_engine: MagicMock,
 ) -> None:
     """A cached document whose recheck is not due counts as a cache hit."""
@@ -180,7 +180,7 @@ def test_download_and_cache2_skips_cached_document(
 
 def test_download_and_cache2_redownloads_modified_document(
     download_item: GesetzVorgang,
-    download_pipeline2: DownloadDocuments2,
+    download_pipeline2: DownloadDocuments,
     download_engine: MagicMock,
 ) -> None:
     """A changed Last-Modified header resets the old cache and downloads fresh bytes."""
@@ -206,7 +206,7 @@ def test_download_and_cache2_redownloads_modified_document(
 def test_download_and_cache2_skips_document_from_another_wahlperiode(
     base_vorgang_data: dict,
     plpr_data: dict,
-    download_pipeline2: DownloadDocuments2,
+    download_pipeline2: DownloadDocuments,
     download_engine: MagicMock,
 ) -> None:
     """Documents from another Wahlperiode are not cached or downloaded."""
@@ -220,7 +220,7 @@ def test_download_and_cache2_skips_document_from_another_wahlperiode(
 
 def test_download_and_cache2_counts_incorrect_response(
     download_item: GesetzVorgang,
-    download_pipeline2: DownloadDocuments2,
+    download_pipeline2: DownloadDocuments,
     download_engine: MagicMock,
 ) -> None:
     """A non-Response download result is counted and not cached."""
@@ -234,7 +234,7 @@ def test_download_and_cache2_counts_incorrect_response(
 
 def test_download_and_cache2_counts_incorrect_status(
     download_item: GesetzVorgang,
-    download_pipeline2: DownloadDocuments2,
+    download_pipeline2: DownloadDocuments,
     download_engine: MagicMock,
 ) -> None:
     """A non-200 download response is counted and not cached."""

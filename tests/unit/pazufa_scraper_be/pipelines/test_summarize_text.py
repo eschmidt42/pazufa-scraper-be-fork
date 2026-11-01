@@ -15,7 +15,7 @@ from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang
-from pazufa_scraper_be.pipelines.documents.summarize_text import SummarizeText2
+from pazufa_scraper_be.pipelines.documents.summarize_text import SummarizeText
 from pazufa_scraper_be.pipelines.stats_counter import LLMCounter, SummaryCounter
 
 WAHLPERIODE = 19
@@ -29,7 +29,7 @@ def make_crawler(settings: dict | None = None, stats: StatsCollector | None = No
 
 
 @pytest.fixture
-def summarize_pipeline2(tmp_path: Path) -> tuple[SummarizeText2, MagicMock]:
+def summarize_pipeline2(tmp_path: Path) -> tuple[SummarizeText, MagicMock]:
     """Create a summarization pipeline with a mocked connector and isolated cache."""
     connector = MagicMock()
     connector.summarize_dokument = AsyncMock(return_value="summary text")
@@ -51,17 +51,17 @@ def summarize_pipeline2(tmp_path: Path) -> tuple[SummarizeText2, MagicMock]:
     crawler.stats = StatsCollector(crawler)
 
     with patch("pazufa_scraper_be.pipelines.documents.summarize_text.LLMConnector", return_value=connector):
-        pipeline = SummarizeText2.from_crawler(crawler)
+        pipeline = SummarizeText.from_crawler(crawler)
 
     return pipeline, connector
 
 
-def _cache_for_document2(pipeline: SummarizeText2, document: AnyGesetzDokument) -> Cache:
+def _cache_for_document2(pipeline: SummarizeText, document: AnyGesetzDokument) -> Cache:
     assert document.lok_url is not None
     return pipeline._cache_factory.for_document(document=document, url=document.lok_url)
 
 
-def test_summarize2_pipeline_rejects_non_vorgang(summarize_pipeline2: tuple[SummarizeText2, MagicMock]) -> None:
+def test_summarize2_pipeline_rejects_non_vorgang(summarize_pipeline2: tuple[SummarizeText, MagicMock]) -> None:
     """Items of an unexpected type are dropped."""
     pipeline, _ = summarize_pipeline2
     invalid_item: Any = object()
@@ -73,7 +73,7 @@ def test_summarize2_pipeline_rejects_non_vorgang(summarize_pipeline2: tuple[Summ
 def test_summarize2_pipeline_skips_when_llm_is_disabled(
     base_vorgang_data: dict[str, Any],
     drs_data: dict[str, Any],
-    summarize_pipeline2: tuple[SummarizeText2, MagicMock],
+    summarize_pipeline2: tuple[SummarizeText, MagicMock],
 ) -> None:
     """An item is returned unchanged when no LLM connector is configured."""
     pipeline, connector = summarize_pipeline2
@@ -90,7 +90,7 @@ def test_summarize2_pipeline_skips_when_llm_is_disabled(
 def test_summarize2_pipeline_skips_missing_text(
     base_vorgang_data: dict[str, Any],
     drs_data: dict[str, Any],
-    summarize_pipeline2: tuple[SummarizeText2, MagicMock],
+    summarize_pipeline2: tuple[SummarizeText, MagicMock],
 ) -> None:
     """Documents without cached text are skipped without an LLM call."""
     pipeline, connector = summarize_pipeline2
@@ -105,7 +105,7 @@ def test_summarize2_pipeline_skips_missing_text(
 def test_summarize2_pipeline_skips_ignored_document(
     base_vorgang_data: dict[str, Any],
     drs_data: dict[str, Any],
-    summarize_pipeline2: tuple[SummarizeText2, MagicMock],
+    summarize_pipeline2: tuple[SummarizeText, MagicMock],
 ) -> None:
     """Documents marked to ignore are counted and skipped."""
     pipeline, connector = summarize_pipeline2
@@ -122,7 +122,7 @@ def test_summarize2_pipeline_skips_ignored_document(
 def test_summarize2_pipeline_links_cached_model_summary(
     base_vorgang_data: dict[str, Any],
     drs_data: dict[str, Any],
-    summarize_pipeline2: tuple[SummarizeText2, MagicMock],
+    summarize_pipeline2: tuple[SummarizeText, MagicMock],
 ) -> None:
     """An existing model-specific summary is linked without another LLM call."""
     pipeline, connector = summarize_pipeline2
@@ -151,7 +151,7 @@ def test_summarize2_pipeline_links_cached_model_summary(
 def test_summarize2_pipeline_dispatches_and_caches_document_summary(
     request: pytest.FixtureRequest,
     base_vorgang_data: dict[str, Any],
-    summarize_pipeline2: tuple[SummarizeText2, MagicMock],
+    summarize_pipeline2: tuple[SummarizeText, MagicMock],
     scenario: tuple[str, str],
 ) -> None:
     """Drucksachen and GVBl documents use their expected LLM method and cache its result."""
@@ -179,7 +179,7 @@ def test_summarize2_pipeline_dispatches_and_caches_document_summary(
 def test_summarize2_pipeline_extracts_protocol_section_before_summarizing(
     base_vorgang_data: dict[str, Any],
     plpr_data: dict[str, Any],
-    summarize_pipeline2: tuple[SummarizeText2, MagicMock],
+    summarize_pipeline2: tuple[SummarizeText, MagicMock],
 ) -> None:
     """Protocol text is summarized only after a relevant section is extracted."""
     pipeline, connector = summarize_pipeline2
@@ -202,7 +202,7 @@ def test_summarize2_pipeline_extracts_protocol_section_before_summarizing(
 def test_summarize2_pipeline_ignores_protocol_without_relevant_section(
     base_vorgang_data: dict[str, Any],
     plpr_data: dict[str, Any],
-    summarize_pipeline2: tuple[SummarizeText2, MagicMock],
+    summarize_pipeline2: tuple[SummarizeText, MagicMock],
 ) -> None:
     """A protocol without a relevant section is marked ignored and not summarized."""
     pipeline, connector = summarize_pipeline2
@@ -229,7 +229,7 @@ def test_summarize2_pipeline_ignores_protocol_without_relevant_section(
 def test_summarize2_pipeline_does_not_cache_failed_summary(
     base_vorgang_data: dict[str, Any],
     drs_data: dict[str, Any],
-    summarize_pipeline2: tuple[SummarizeText2, MagicMock],
+    summarize_pipeline2: tuple[SummarizeText, MagicMock],
     caplog: pytest.LogCaptureFixture,
     scenario: tuple[str | None, LLMCounter, str],
 ) -> None:
@@ -252,7 +252,7 @@ def test_summarize2_pipeline_does_not_cache_failed_summary(
 def test_summarize2_pipeline_marks_provider_failure_ignored(
     base_vorgang_data: dict[str, Any],
     drs_data: dict[str, Any],
-    summarize_pipeline2: tuple[SummarizeText2, MagicMock],
+    summarize_pipeline2: tuple[SummarizeText, MagicMock],
 ) -> None:
     """Provider errors mark a document ignored and increment the provider-failure counter."""
     pipeline, connector = summarize_pipeline2
@@ -271,7 +271,7 @@ def test_summarize2_pipeline_marks_provider_failure_ignored(
 def test__llm_pipeline_without_token_skips_connector2(caplog: pytest.LogCaptureFixture, tmp_path: Path) -> None:
     """Without an LLM token, summarization is disabled."""
     with caplog.at_level(logging.INFO):
-        pipeline = SummarizeText2.from_crawler(make_crawler({"WAHLPERIODE": WAHLPERIODE, "CACHE_DIR": tmp_path / "cache"}))
+        pipeline = SummarizeText.from_crawler(make_crawler({"WAHLPERIODE": WAHLPERIODE, "CACHE_DIR": tmp_path / "cache"}))
 
     assert pipeline.llm_connector is None
     assert "LLM_TOKEN is not set" in caplog.text
@@ -282,7 +282,7 @@ def test__llm_pipeline_requires_model_when_token_is_set2(tmp_path: Path) -> None
     settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token", "CACHE_DIR": tmp_path / "cache"}
 
     with pytest.raises(ValueError, match="LLM_MODEL setting is required"):
-        SummarizeText2.from_crawler(make_crawler(settings))
+        SummarizeText.from_crawler(make_crawler(settings))
 
 
 @pytest.mark.parametrize("timeout", [0, -1])
@@ -291,14 +291,14 @@ def test__llm_pipeline_requires_positive_timeout2(timeout: int, tmp_path: Path) 
     settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token", "LLM_MODEL": "model", "LLM_TIMEOUT": timeout, "CACHE_DIR": tmp_path / "cache"}
 
     with pytest.raises(ValueError, match="Invalid LLM_TIMEOUT"):
-        SummarizeText2.from_crawler(make_crawler(settings))
+        SummarizeText.from_crawler(make_crawler(settings))
 
 
 def test__llm_pipeline_creates_connector_and_configures_litellm2(tmp_path: Path) -> None:
     """Configured LLM settings are passed to LLMConnector."""
     settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token", "LLM_MODEL": "model", "LLM_TIMEOUT": 30, "CACHE_DIR": tmp_path / "cache"}
     with patch("pazufa_scraper_be.pipelines.documents.summarize_text.LLMConnector") as connector:
-        pipeline = SummarizeText2.from_crawler(make_crawler(settings))
+        pipeline = SummarizeText.from_crawler(make_crawler(settings))
 
     assert pipeline.llm_connector is connector.return_value
     connector.assert_called_once_with(model="model", api_key="token", timeout_seconds=30)

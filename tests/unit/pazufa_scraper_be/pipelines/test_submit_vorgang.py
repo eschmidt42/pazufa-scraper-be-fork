@@ -25,7 +25,7 @@ from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.constants import SUBMISSION_ERROR_GRACE_PERIOD_DAYS
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
-from pazufa_scraper_be.pipelines.submit_vorgang import SubmitVorgang2, get_client
+from pazufa_scraper_be.pipelines.submit_vorgang import SubmitVorgang, get_client
 
 WAHLPERIODE = 19
 
@@ -54,7 +54,7 @@ def submit_vorgang() -> Vorgang:
 
 
 @pytest.fixture
-def submit_pipeline2(tmp_path: Path) -> SubmitVorgang2:
+def submit_pipeline2(tmp_path: Path) -> SubmitVorgang:
     """Create a SubmitVorgang pipeline configured for API submission."""
     crawler = Crawler(
         Spider,
@@ -69,7 +69,7 @@ def submit_pipeline2(tmp_path: Path) -> SubmitVorgang2:
     )
     crawler.stats = StatsCollector(crawler)
     crawler.stats.set_value("temp_error_directory", str(tmp_path))
-    return SubmitVorgang2.from_crawler(crawler)
+    return SubmitVorgang.from_crawler(crawler)
 
 
 def _mock_client() -> MagicMock:
@@ -89,19 +89,19 @@ def make_crawler(settings: dict | None = None, stats: StatsCollector | None = No
 def test__api_pipeline_requires_scraper_uuid2() -> None:
     """ApiPipeline requires the scraper UUID setting."""
     with pytest.raises(ValueError, match="Missing SCRAPER_UUID"):
-        SubmitVorgang2.from_crawler(make_crawler({"WAHLPERIODE": WAHLPERIODE}))
+        SubmitVorgang.from_crawler(make_crawler({"WAHLPERIODE": WAHLPERIODE}))
 
 
 def test__api_pipeline_requires_api_url_when_token_is_set2() -> None:
     """An API token requires an API URL."""
     with pytest.raises(ValueError, match="API_URL setting is required"):
-        SubmitVorgang2.from_crawler(make_crawler({"WAHLPERIODE": WAHLPERIODE, "API_TOKEN": "token", "SCRAPER_UUID": "uuid"}))
+        SubmitVorgang.from_crawler(make_crawler({"WAHLPERIODE": WAHLPERIODE, "API_TOKEN": "token", "SCRAPER_UUID": "uuid"}))
 
 
 def test__api_pipeline_without_token_has_no_client2(caplog: pytest.LogCaptureFixture) -> None:
     """Without a token, API submission is disabled."""
     with caplog.at_level(logging.INFO):
-        pipeline = SubmitVorgang2.from_crawler(make_crawler({"WAHLPERIODE": WAHLPERIODE, "SCRAPER_UUID": "uuid"}))
+        pipeline = SubmitVorgang.from_crawler(make_crawler({"WAHLPERIODE": WAHLPERIODE, "SCRAPER_UUID": "uuid"}))
 
     assert get_client(token=pipeline._api_token, url=pipeline._api_url) is None
     assert "API_TOKEN is not set" in caplog.text
@@ -111,7 +111,7 @@ def test__api_pipeline_creates_authenticated_client2() -> None:
     """Configured API credentials are passed to AuthenticatedClient."""
     settings = {"WAHLPERIODE": WAHLPERIODE, "API_URL": "https://api.example", "API_TOKEN": "test-value", "SCRAPER_UUID": "uuid"}
     with patch("pazufa_scraper_be.pipelines.submit_vorgang.AuthenticatedClient") as client:
-        pipeline = SubmitVorgang2.from_crawler(make_crawler(settings))
+        pipeline = SubmitVorgang.from_crawler(make_crawler(settings))
 
         result = get_client(token=pipeline._api_token, url=pipeline._api_url)
 
@@ -125,7 +125,7 @@ def test__api_pipeline_creates_authenticated_client2() -> None:
     }
 
 
-def test_submit_vorgang_rejects_unexpected_item2(submit_pipeline2: SubmitVorgang2) -> None:
+def test_submit_vorgang_rejects_unexpected_item2(submit_pipeline2: SubmitVorgang) -> None:
     """Items that are not API Vorgang objects are dropped."""
     with pytest.raises(DropItem, match="Expected Vorgang object but got object"):
         asyncio.run(submit_pipeline2.process_item(object()))  # ty: ignore[invalid-argument-type]
@@ -135,7 +135,7 @@ def test_submit_vorgang_skips_when_api_token_is_missing2(submit_vorgang: Vorgang
     """Submission without an API token is skipped without changing stats."""
     crawler = Crawler(Spider, Settings({"WAHLPERIODE": 19, "SCRAPER_UUID": "12345678-1234-5678-1234-567812345678"}))
     crawler.stats = StatsCollector(crawler)
-    pipeline = SubmitVorgang2.from_crawler(crawler)
+    pipeline = SubmitVorgang.from_crawler(crawler)
 
     asyncio.run(pipeline.process_item(submit_vorgang))
 
@@ -144,7 +144,7 @@ def test_submit_vorgang_skips_when_api_token_is_missing2(submit_vorgang: Vorgang
 
 def test_submit_vorgang_counts_created_response2(
     submit_vorgang: Vorgang,
-    submit_pipeline2: SubmitVorgang2,
+    submit_pipeline2: SubmitVorgang,
 ) -> None:
     """A 201 response is counted as an accepted submission."""
     client = _mock_client()
@@ -169,7 +169,7 @@ def test_submit_vorgang_counts_created_response2(
 
 def test_submit_vorgang_counts_recent_api_error_as_grace_period_error2(
     submit_vorgang: Vorgang,
-    submit_pipeline2: SubmitVorgang2,
+    submit_pipeline2: SubmitVorgang,
 ) -> None:
     """A failed submission within the grace period is logged as an error, not rejected."""
     submit_vorgang.stationen[-1].zp_start = datetime.now(UTC) - timedelta(days=SUBMISSION_ERROR_GRACE_PERIOD_DAYS - 1)
@@ -193,7 +193,7 @@ def test_submit_vorgang_counts_recent_api_error_as_grace_period_error2(
 
 def test_submit_vorgang_saves_old_rejection2(
     submit_vorgang: Vorgang,
-    submit_pipeline2: SubmitVorgang2,
+    submit_pipeline2: SubmitVorgang,
     tmp_path: Path,
 ) -> None:
     """A failed submission older than the grace period is counted and persisted as JSON."""

@@ -16,7 +16,7 @@ from pazufa_scraper_be.pipelines.stats_counter import LLMCounter, SummaryCounter
 logger = logging.getLogger(__name__)
 
 
-class SummarizeText2:
+class SummarizeText:
     """Pipeline that summarizes extracted document text via an LLM."""
 
     _llm_token: str | None
@@ -26,7 +26,7 @@ class SummarizeText2:
     _stats: StatsReporter
 
     @classmethod
-    def from_crawler(cls, crawler: Crawler) -> "SummarizeText2":
+    def from_crawler(cls, crawler: Crawler) -> "SummarizeText":
         """Create the pipeline with dependencies initialized from the crawler."""
         return cls(
             crawler=crawler,

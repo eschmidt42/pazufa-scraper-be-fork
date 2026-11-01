@@ -14,18 +14,18 @@ from scrapy.statscollectors import StatsCollector
 from pazufa_scraper_be.cache import Key
 from pazufa_scraper_be.pardok import GesetzVorgang
 from pazufa_scraper_be.pipelines.documents.extract_text import (
-    ExtractText2,
+    ExtractText,
     extract_text_with_ocr_backup,
 )
 from pazufa_scraper_be.pipelines.stats_counter import TextCounter
 
 
 @pytest.fixture
-def extract_pipeline2(tmp_path: Path) -> ExtractText2:
+def extract_pipeline2(tmp_path: Path) -> ExtractText:
     """Create an extraction pipeline with a temporary cache and Scrapy stats."""
     crawler = Crawler(Spider, Settings({"WAHLPERIODE": 19, "CACHE_DIR": tmp_path}))
     crawler.stats = StatsCollector(crawler)
-    return ExtractText2.from_crawler(crawler)
+    return ExtractText.from_crawler(crawler)
 
 
 @pytest.fixture
@@ -97,7 +97,7 @@ def test_extract_text_propagates_extraction_errors() -> None:
 
 def test_extract2_pipeline_normalizes_and_caches_text(
     extract_item: GesetzVorgang,
-    extract_pipeline2: ExtractText2,
+    extract_pipeline2: ExtractText,
 ) -> None:
     """A cache miss extracts text, removes known control characters, and records stats."""
     document = extract_item.dokumente[0]
@@ -121,7 +121,7 @@ def test_extract2_pipeline_normalizes_and_caches_text(
 
 def test_extract2_pipeline_skips_cached_text(
     extract_item: GesetzVorgang,
-    extract_pipeline2: ExtractText2,
+    extract_pipeline2: ExtractText,
 ) -> None:
     """A document with cached text is counted as a hit without re-extraction."""
     document = extract_item.dokumente[0]
@@ -139,7 +139,7 @@ def test_extract2_pipeline_skips_cached_text(
 
 def test_extract2_pipeline_skips_documents_missing_from_cache(
     extract_item: GesetzVorgang,
-    extract_pipeline2: ExtractText2,
+    extract_pipeline2: ExtractText,
 ) -> None:
     """A document without cached bytes is ignored without attempting extraction."""
     document = extract_item.dokumente[0]
@@ -157,7 +157,7 @@ def test_extract2_pipeline_skips_documents_missing_from_cache(
 
 def test_extract2_pipeline_counts_and_logs_empty_text(
     extract_item: GesetzVorgang,
-    extract_pipeline2: ExtractText2,
+    extract_pipeline2: ExtractText,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Empty output is logged and counted without adding a text cache entry."""
@@ -178,7 +178,7 @@ def test_extract2_pipeline_counts_and_logs_empty_text(
     assert f"[{extract_item.id} - {document.id}]: No text extracted." in caplog.text
 
 
-def test_extract2_pipeline_rejects_non_vorgang(extract_pipeline2: ExtractText2) -> None:
+def test_extract2_pipeline_rejects_non_vorgang(extract_pipeline2: ExtractText) -> None:
     """Items of an unexpected type are dropped."""
     invalid_item: Any = object()
     with pytest.raises(DropItem, match="Expected GesetzVorgang object"):

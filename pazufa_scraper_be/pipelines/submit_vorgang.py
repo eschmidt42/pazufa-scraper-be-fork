@@ -36,7 +36,7 @@ def get_client(*, token: str | None, url: str) -> AuthenticatedClient | None:
     return None
 
 
-class SubmitVorgang2:
+class SubmitVorgang:
     """Pipeline that submits a built Vorgang to the PaZuFa API."""
 
     _api_url: str
@@ -45,7 +45,7 @@ class SubmitVorgang2:
     _stats: StatsReporter
 
     @classmethod
-    def from_crawler(cls, crawler: Crawler) -> "SubmitVorgang2":
+    def from_crawler(cls, crawler: Crawler) -> "SubmitVorgang":
         """Create the pipeline with dependencies initialized from the crawler."""
         scraper_uuid = crawler.settings.get("SCRAPER_UUID", None)
         api_url = crawler.settings.get("API_URL", None)

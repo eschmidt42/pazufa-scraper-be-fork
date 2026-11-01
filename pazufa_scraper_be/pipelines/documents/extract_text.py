@@ -47,14 +47,14 @@ def _text_edits(text: str) -> str:
     )
 
 
-class ExtractText2:
+class ExtractText:
     """Pipeline that extracts plain text from cached PDF documents using xberg."""
 
     _cache_factory: DocumentCacheFactory
     _stats: StatsReporter
 
     @classmethod
-    def from_crawler(cls, crawler: Crawler) -> "ExtractText2":
+    def from_crawler(cls, crawler: Crawler) -> "ExtractText":
         """Create the pipeline with dependencies initialized from the crawler."""
         return cls(cache_factory=DocumentCacheFactory.from_crawler(crawler), stats=StatsReporter(crawler.stats))
 

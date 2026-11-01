@@ -12,7 +12,7 @@ from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
 logger = logging.getLogger(__name__)
 
 
-class PrepareDocumentUrls2:
+class PrepareDocumentUrls:
     """Pipeline that fixes and adds additional document URLs."""
 
     wahlperiode: int
@@ -20,7 +20,7 @@ class PrepareDocumentUrls2:
     _crawler: Crawler
 
     @classmethod
-    def from_crawler(cls, crawler: Crawler) -> "PrepareDocumentUrls2":
+    def from_crawler(cls, crawler: Crawler) -> "PrepareDocumentUrls":
         """Create a pipeline using the crawler's settings, stats, and engine."""
         return cls(wahlperiode=get_wahlperiode(crawler), stats=StatsReporter(crawler.stats), crawler=crawler)
 
