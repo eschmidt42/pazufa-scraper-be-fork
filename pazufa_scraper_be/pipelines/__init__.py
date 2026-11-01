@@ -7,6 +7,7 @@ from .documents import (
     PrepareDocumentUrls,
     PrepareDocumentUrls2,
     SummarizeText,
+    SummarizeText2,
 )
 from .handle_errors import HandleErrors, HandleErrors2
 from .submit_vorgang import SubmitVorgang
@@ -24,4 +25,5 @@ __all__ = [
     "PrepareDocumentUrls2",
     "SubmitVorgang",
     "SummarizeText",
+    "SummarizeText2",
 ]

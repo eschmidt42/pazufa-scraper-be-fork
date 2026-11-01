@@ -1,7 +1,7 @@
 from .download_documents import DownloadDocuments, DownloadDocuments2
 from .extract_text import ExtractText, ExtractText2
 from .prepare_document_urls import PrepareDocumentUrls, PrepareDocumentUrls2
-from .summarize_text import SummarizeText
+from .summarize_text import SummarizeText, SummarizeText2
 
 __all__ = [
     "DownloadDocuments",
@@ -11,4 +11,5 @@ __all__ = [
     "PrepareDocumentUrls",
     "PrepareDocumentUrls2",
     "SummarizeText",
+    "SummarizeText2",
 ]
