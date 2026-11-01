@@ -18,7 +18,8 @@ from pazufa_scraper_be.pipelines.common import (
     CachePipeline,
     LLMPipeline,
     StatsPipeline,
-    _get_wahlperiode,
+    StatsReporter,
+    get_wahlperiode,
 )
 from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
 
@@ -40,21 +41,21 @@ def make_crawler(settings: dict | None = None, stats: StatsCollector | None = No
     return crawler
 
 
-def test__get_wahlperiode_returns_configured_value() -> None:
+def test_get_wahlperiode_returns_configured_value() -> None:
     """The configured Wahlperiode setting is returned."""
-    assert _get_wahlperiode(make_crawler({"WAHLPERIODE": WAHLPERIODE})) == WAHLPERIODE
+    assert get_wahlperiode(make_crawler({"WAHLPERIODE": WAHLPERIODE})) == WAHLPERIODE
 
 
-def test__get_wahlperiode_uses_scrapy_default_when_setting_is_missing() -> None:
+def test_get_wahlperiode_uses_scrapy_default_when_setting_is_missing() -> None:
     """Scrapy's default is returned when WAHLPERIODE is absent."""
-    assert _get_wahlperiode(make_crawler()) == 0
+    assert get_wahlperiode(make_crawler()) == 0
 
 
-def test__get_wahlperiode_raises_when_setting_is_none() -> None:
+def test_get_wahlperiode_raises_when_setting_is_none() -> None:
     """A None setting raises a clear error."""
     crawler = make_crawler()
     with patch.object(crawler.settings, "getint", return_value=None), pytest.raises(ValueError, match="Missing WAHLPERIODE"):
-        _get_wahlperiode(crawler)
+        get_wahlperiode(crawler)
 
 
 def test__base_pipeline_from_crawler_initializes_pipeline() -> None:
@@ -95,6 +96,30 @@ def test__stats_pipeline_increments_enum_and_string_counters() -> None:
 
     increment.assert_any_call(DokumentCounter.CACHE_HIT.value)
     increment.assert_any_call("custom/key")
+
+
+def test_stats_reporter_increments_enum_and_string_counters() -> None:
+    """StatsReporter increments counters identified by enum values or literal keys."""
+    stats = StatsCollector(make_crawler())
+    reporter = StatsReporter(stats)
+
+    reporter.increment(DokumentCounter.CACHE_HIT)
+    reporter.increment(DokumentCounter.CACHE_HIT)
+    reporter.increment("custom/key")
+
+    assert reporter.get_value(DokumentCounter.CACHE_HIT.value) == 2
+    assert reporter.get_value("custom/key") == 1
+
+
+def test_stats_reporter_get_value_returns_value_and_default() -> None:
+    """StatsReporter returns stored values and the requested default for missing keys."""
+    stats = StatsCollector(make_crawler())
+    reporter = StatsReporter(stats)
+    stats.set_value("existing/key", "value")
+
+    assert reporter.get_value("existing/key") == "value"
+    assert reporter.get_value("missing/key") is None
+    assert reporter.get_value("missing/key", 0) == 0
 
 
 def test__cache_pipeline_raises_when_cache_dir_setting_missing() -> None:

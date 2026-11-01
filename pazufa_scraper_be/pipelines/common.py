@@ -18,7 +18,31 @@ from pazufa_scraper_be.pipelines.stats_counter import StatsCounter
 logger = logging.getLogger(__name__)
 
 
-def _get_wahlperiode(crawler: Crawler) -> int:
+class StatsReporter:
+    """Provide convenience methods for reading and updating Scrapy stats."""
+
+    _stats: StatsCollector
+
+    def __init__(self, stats: StatsCollector) -> None:
+        """Initialize the reporter with a Scrapy stats collector."""
+        self._stats = stats
+
+    def increment(self, counter: StatsCounter | str) -> None:
+        """Increment a named counter."""
+        key = counter.value if isinstance(counter, StatsCounter) else counter
+        self._stats.inc_value(key)
+
+    def get_value(
+        self,
+        key: str,
+        default: int | None = None,
+    ) -> object:
+        """Return the value of the *key* stat, or *default* if it is not set."""
+        return self._stats.get_value(key, default)
+
+
+def get_wahlperiode(crawler: Crawler) -> int:
+    """Get Wahlperiode ^^."""
     wahlperiode = crawler.settings.getint("WAHLPERIODE")
 
     if wahlperiode is None:
@@ -42,7 +66,7 @@ class BasePipeline(ABC):
     def __init__(self: Self, crawler: Crawler) -> None:
         """Store the crawler and initialize pipeline-specific state."""
         self.crawler = crawler
-        self.wahlperiode = _get_wahlperiode(crawler)
+        self.wahlperiode = get_wahlperiode(crawler)
 
         self.init()
 

@@ -1,3 +1,4 @@
+from scrapy.core.engine import ExecutionEngine
 from scrapy.crawler import Crawler
 from scrapy.exceptions import DropItem
 
@@ -14,5 +15,12 @@ def vorgang_guard(vorgang: GesetzVorgang) -> None:
 def engine_guard(crawler: Crawler) -> None:
     """Guards against missing crawler engine."""
     if crawler.engine is None:
+        msg = "crawler.engine is None. The crawler seems improperly initialized."
+        raise ValueError(msg)
+
+
+def engine_guard2(engine: ExecutionEngine) -> None:
+    """Guards against missing crawler engine."""
+    if engine is None:
         msg = "crawler.engine is None. The crawler seems improperly initialized."
         raise ValueError(msg)
