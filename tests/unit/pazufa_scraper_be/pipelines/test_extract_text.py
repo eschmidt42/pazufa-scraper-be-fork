@@ -14,19 +14,10 @@ from scrapy.statscollectors import StatsCollector
 from pazufa_scraper_be.cache import Key
 from pazufa_scraper_be.pardok import GesetzVorgang
 from pazufa_scraper_be.pipelines.documents.extract_text import (
-    ExtractText,
     ExtractText2,
     extract_text_with_ocr_backup,
 )
 from pazufa_scraper_be.pipelines.stats_counter import TextCounter
-
-
-@pytest.fixture
-def extract_pipeline(tmp_path: Path) -> ExtractText:
-    """Create an extraction pipeline with a temporary cache and Scrapy stats."""
-    crawler = Crawler(Spider, Settings({"WAHLPERIODE": 19, "CACHE_DIR": tmp_path}))
-    crawler.stats = StatsCollector(crawler)
-    return ExtractText(crawler)
 
 
 @pytest.fixture
@@ -104,30 +95,6 @@ def test_extract_text_propagates_extraction_errors() -> None:
     extract.assert_awaited_once()
 
 
-def test_extract_pipeline_normalizes_and_caches_text(
-    extract_item: GesetzVorgang,
-    extract_pipeline: ExtractText,
-) -> None:
-    """A cache miss extracts text, removes known control characters, and records stats."""
-    document = extract_item.dokumente[0]
-    assert document.lok_url is not None
-    cache = extract_pipeline.get_cache(document, document.lok_url)
-    cache[Key.DOCUMENT] = b"pdf bytes"
-
-    with patch(
-        "pazufa_scraper_be.pipelines.documents.extract_text.extract_text_with_ocr_backup",
-        new_callable=AsyncMock,
-        return_value=" \x02A\x15B\x16C\x18 ",
-    ) as extract:
-        result = asyncio.run(extract_pipeline.process_item(extract_item))
-
-    assert result is extract_item
-    assert cache[Key.TEXT] == "ABC"
-    extract.assert_awaited_once_with(document_bytes=b"pdf bytes")
-    assert extract_pipeline.stats.get_value(TextCounter.CACHE_MISS.value) == 1
-    assert extract_pipeline.stats.get_value(TextCounter.EXTRACT_DONE.value) == 1
-
-
 def test_extract2_pipeline_normalizes_and_caches_text(
     extract_item: GesetzVorgang,
     extract_pipeline2: ExtractText2,
@@ -152,24 +119,6 @@ def test_extract2_pipeline_normalizes_and_caches_text(
     assert extract_pipeline2._stats.get_value(TextCounter.EXTRACT_DONE.value) == 1
 
 
-def test_extract_pipeline_skips_cached_text(
-    extract_item: GesetzVorgang,
-    extract_pipeline: ExtractText,
-) -> None:
-    """A document with cached text is counted as a hit without re-extraction."""
-    document = extract_item.dokumente[0]
-    assert document.lok_url is not None
-    cache = extract_pipeline.get_cache(document, document.lok_url)
-    cache[Key.DOCUMENT] = b"pdf bytes"
-    cache[Key.TEXT] = "cached text"
-
-    with patch("pazufa_scraper_be.pipelines.documents.extract_text._extract_text", new_callable=AsyncMock) as extract:
-        asyncio.run(extract_pipeline.process_item(extract_item))
-
-    extract.assert_not_awaited()
-    assert extract_pipeline.stats.get_value(TextCounter.CACHE_HIT.value) == 1
-
-
 def test_extract2_pipeline_skips_cached_text(
     extract_item: GesetzVorgang,
     extract_pipeline2: ExtractText2,
@@ -188,24 +137,6 @@ def test_extract2_pipeline_skips_cached_text(
     assert extract_pipeline2._stats.get_value(TextCounter.CACHE_HIT.value) == 1
 
 
-def test_extract_pipeline_skips_documents_missing_from_cache(
-    extract_item: GesetzVorgang,
-    extract_pipeline: ExtractText,
-) -> None:
-    """A document without cached bytes is ignored without attempting extraction."""
-    document = extract_item.dokumente[0]
-    assert document.lok_url is not None
-
-    with patch(
-        "pazufa_scraper_be.pipelines.documents.extract_text.extract_text_with_ocr_backup",
-        new_callable=AsyncMock,
-    ) as extract:
-        asyncio.run(extract_pipeline.process_item(extract_item))
-
-    extract.assert_not_awaited()
-    assert extract_pipeline.stats.get_value(TextCounter.CACHE_MISS.value) is None
-
-
 def test_extract2_pipeline_skips_documents_missing_from_cache(
     extract_item: GesetzVorgang,
     extract_pipeline2: ExtractText2,
@@ -222,29 +153,6 @@ def test_extract2_pipeline_skips_documents_missing_from_cache(
 
     extract.assert_not_awaited()
     assert extract_pipeline2._stats.get_value(TextCounter.CACHE_MISS.value) is None
-
-
-def test_extract_pipeline_counts_and_logs_empty_text(
-    extract_item: GesetzVorgang,
-    extract_pipeline: ExtractText,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Empty output is logged and counted without adding a text cache entry."""
-    document = extract_item.dokumente[0]
-    assert document.lok_url is not None
-    cache = extract_pipeline.get_cache(document, document.lok_url)
-    cache[Key.DOCUMENT] = b"pdf bytes"
-
-    with patch(
-        "pazufa_scraper_be.pipelines.documents.extract_text._extract_text",
-        new_callable=AsyncMock,
-        return_value="",
-    ):
-        asyncio.run(extract_pipeline.process_item(extract_item))
-
-    assert Key.TEXT not in cache
-    assert extract_pipeline.stats.get_value(TextCounter.EXTRACT_FAILED_EMPTY_TEXT.value) == 1
-    assert f"[{extract_item.id} - {document.id}]: No text extracted." in caplog.text
 
 
 def test_extract2_pipeline_counts_and_logs_empty_text(
@@ -268,13 +176,6 @@ def test_extract2_pipeline_counts_and_logs_empty_text(
     assert Key.TEXT not in cache
     assert extract_pipeline2._stats.get_value(TextCounter.EXTRACT_FAILED_EMPTY_TEXT.value) == 1
     assert f"[{extract_item.id} - {document.id}]: No text extracted." in caplog.text
-
-
-def test_extract_pipeline_rejects_non_vorgang(extract_pipeline: ExtractText) -> None:
-    """Items of an unexpected type are dropped."""
-    invalid_item: Any = object()
-    with pytest.raises(DropItem, match="Expected GesetzVorgang object"):
-        asyncio.run(extract_pipeline.process_item(invalid_item))
 
 
 def test_extract2_pipeline_rejects_non_vorgang(extract_pipeline2: ExtractText2) -> None:

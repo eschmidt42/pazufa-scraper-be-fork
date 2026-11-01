@@ -19,7 +19,6 @@ from pazufa_scraper_be.constants import DOCUMENT_CHECK_MODIFIED_EVERY_DAYS
 from pazufa_scraper_be.pardok import GesetzVorgang
 from pazufa_scraper_be.pipelines.documents.download_documents import (
     LAST_MODIFIED_TIME_FORMAT,
-    DownloadDocuments,
     DownloadDocuments2,
     _fetch_last_modified,
     _is_recheck_due,
@@ -40,15 +39,6 @@ def download_engine() -> MagicMock:
 
 
 @pytest.fixture
-def download_pipeline(tmp_path: Path, download_engine: MagicMock) -> DownloadDocuments:
-    """Create a download pipeline with a temporary cache and mocked engine."""
-    crawler = Crawler(Spider, Settings({"WAHLPERIODE": 19, "CACHE_DIR": tmp_path}))
-    crawler.stats = StatsCollector(crawler)
-    crawler.engine = download_engine
-    return DownloadDocuments(crawler)
-
-
-@pytest.fixture
 def download_pipeline2(tmp_path: Path, download_engine: MagicMock) -> DownloadDocuments2:
     """Create a download pipeline with a temporary cache and mocked engine."""
     crawler = Crawler(Spider, Settings({"WAHLPERIODE": 19, "CACHE_DIR": tmp_path}))
@@ -61,12 +51,6 @@ def download_pipeline2(tmp_path: Path, download_engine: MagicMock) -> DownloadDo
 def download_item(base_vorgang_data: dict[str, Any], plpr_data: dict[str, Any]) -> GesetzVorgang:
     """Create a Vorgang with one associated document URL."""
     return GesetzVorgang.model_validate({**base_vorgang_data, "Dokument": [{**plpr_data, "LokURL": str(DOCUMENT_URL)}]})
-
-
-def _item_cache(pipeline: DownloadDocuments, item: GesetzVorgang) -> Cache:
-    document = item.dokumente[0]
-    assert document.lok_url is not None
-    return pipeline.get_cache(document=document, document_url=document.lok_url)
 
 
 def _item_cache2(pipeline: DownloadDocuments2, item: GesetzVorgang) -> Cache:
@@ -146,37 +130,6 @@ def test_reset_cache_if_file_got_modified_records_check_without_last_modified(tm
     assert cache.get_timestamp(Key.DOWNLOAD_TIME) is not None
 
 
-def test_download_and_cache_stores_document_and_metadata(
-    download_item: GesetzVorgang,
-    download_pipeline: DownloadDocuments,
-    download_engine: MagicMock,
-) -> None:
-    """A successful cache miss stores document bytes, URL, timestamps, and stats."""
-    response = Response(
-        url=str(DOCUMENT_URL),
-        headers={"Last-Modified": LAST_MODIFIED_HEADER},
-        body=b"document contents",
-    )
-    download_engine.download_async.return_value = response
-
-    result = asyncio.run(download_pipeline.process_item(download_item))
-
-    cache = _item_cache(download_pipeline, download_item)
-    assert result is download_item
-    assert cache[Key.DOCUMENT] == b"document contents"
-    assert cache[Key.URL] == str(DOCUMENT_URL)
-    assert cache.get_timestamp(Key.DOWNLOAD_TIME).tzinfo == UTC
-    assert cache[Key.LAST_MODIFIED] == datetime.strptime(LAST_MODIFIED_HEADER, LAST_MODIFIED_TIME_FORMAT).replace(tzinfo=UTC)
-    assert download_engine.download_async.await_count == 1
-    call = download_engine.download_async.await_args
-    assert call is not None
-    request = call.args[0]
-    assert request.method == "GET"
-    assert request.callback is NO_CALLBACK
-    assert download_pipeline.stats.get_value(DokumentCounter.CACHE_MISS.value) == 1
-    assert download_pipeline.stats.get_value(DokumentCounter.DOWNLOAD_DONE.value) == 1
-
-
 def test_download_and_cache2_stores_document_and_metadata(
     download_item: GesetzVorgang,
     download_pipeline2: DownloadDocuments2,
@@ -208,23 +161,6 @@ def test_download_and_cache2_stores_document_and_metadata(
     assert download_pipeline2._stats.get_value(DokumentCounter.DOWNLOAD_DONE.value) == 1
 
 
-def test_download_and_cache_skips_cached_document(
-    download_item: GesetzVorgang,
-    download_pipeline: DownloadDocuments,
-    download_engine: MagicMock,
-) -> None:
-    """A cached document whose recheck is not due counts as a cache hit."""
-    cache = _item_cache(download_pipeline, download_item)
-    cache[Key.DOCUMENT] = b"cached contents"
-    cache[Key.DOWNLOAD_TIME] = datetime.now(UTC)
-
-    result = asyncio.run(download_pipeline.process_item(download_item))
-
-    assert result is download_item
-    download_engine.download_async.assert_not_awaited()
-    assert download_pipeline.stats.get_value(DokumentCounter.CACHE_HIT.value) == 1
-
-
 def test_download_and_cache2_skips_cached_document(
     download_item: GesetzVorgang,
     download_pipeline2: DownloadDocuments2,
@@ -240,31 +176,6 @@ def test_download_and_cache2_skips_cached_document(
     assert result is download_item
     download_engine.download_async.assert_not_awaited()
     assert download_pipeline2._stats.get_value(DokumentCounter.CACHE_HIT.value) == 1
-
-
-def test_download_and_cache_redownloads_modified_document(
-    download_item: GesetzVorgang,
-    download_pipeline: DownloadDocuments,
-    download_engine: MagicMock,
-) -> None:
-    """A changed Last-Modified header resets the old cache and downloads fresh bytes."""
-    cache = _item_cache(download_pipeline, download_item)
-    cache[Key.DOCUMENT] = b"old contents"
-    cache[Key.DOWNLOAD_TIME] = datetime.now(UTC) - timedelta(days=DOCUMENT_CHECK_MODIFIED_EVERY_DAYS + 1)
-    cache[Key.LAST_MODIFIED] = datetime.strptime(LAST_MODIFIED_HEADER, LAST_MODIFIED_TIME_FORMAT).replace(tzinfo=UTC)
-    modified_header = "Mon, 21 Oct 2024 07:28:00 GMT"
-    download_engine.download_async.side_effect = [
-        Response(url=str(DOCUMENT_URL), headers={"Last-Modified": modified_header}),
-        Response(url=str(DOCUMENT_URL), headers={"Last-Modified": modified_header}, body=b"new contents"),
-    ]
-
-    asyncio.run(download_pipeline.process_item(download_item))
-
-    assert cache[Key.DOCUMENT] == b"new contents"
-    assert cache[Key.LAST_MODIFIED] == datetime.strptime(modified_header, LAST_MODIFIED_TIME_FORMAT).replace(tzinfo=UTC)
-    assert download_engine.download_async.await_count == 2
-    assert download_pipeline.stats.get_value(DokumentCounter.CACHE_RESET.value) == 1
-    assert download_pipeline.stats.get_value(DokumentCounter.DOWNLOAD_DONE.value) == 1
 
 
 def test_download_and_cache2_redownloads_modified_document(
@@ -292,21 +203,6 @@ def test_download_and_cache2_redownloads_modified_document(
     assert download_pipeline2._stats.get_value(DokumentCounter.DOWNLOAD_DONE.value) == 1
 
 
-def test_download_and_cache_skips_document_from_another_wahlperiode(
-    base_vorgang_data: dict,
-    plpr_data: dict,
-    download_pipeline: DownloadDocuments,
-    download_engine: MagicMock,
-) -> None:
-    """Documents from another Wahlperiode are not cached or downloaded."""
-    item = GesetzVorgang.model_validate({**base_vorgang_data, "Dokument": [{**plpr_data, "Wp": 18}]})
-
-    asyncio.run(download_pipeline.process_item(item))
-
-    download_engine.download_async.assert_not_awaited()
-    assert download_pipeline.stats.get_value(DokumentCounter.CACHE_MISS.value) is None
-
-
 def test_download_and_cache2_skips_document_from_another_wahlperiode(
     base_vorgang_data: dict,
     plpr_data: dict,
@@ -322,20 +218,6 @@ def test_download_and_cache2_skips_document_from_another_wahlperiode(
     assert download_pipeline2._stats.get_value(DokumentCounter.CACHE_MISS.value) is None
 
 
-def test_download_and_cache_counts_incorrect_response(
-    download_item: GesetzVorgang,
-    download_pipeline: DownloadDocuments,
-    download_engine: MagicMock,
-) -> None:
-    """A non-Response download result is counted and not cached."""
-    download_engine.download_async.return_value = object()
-
-    asyncio.run(download_pipeline.process_item(download_item))
-
-    assert download_pipeline.stats.get_value(DokumentCounter.DOWNLOAD_FAILED_INCORRECT_RESPONSE.value) == 1
-    assert Key.DOCUMENT not in _item_cache(download_pipeline, download_item)
-
-
 def test_download_and_cache2_counts_incorrect_response(
     download_item: GesetzVorgang,
     download_pipeline2: DownloadDocuments2,
@@ -348,20 +230,6 @@ def test_download_and_cache2_counts_incorrect_response(
 
     assert download_pipeline2._stats.get_value(DokumentCounter.DOWNLOAD_FAILED_INCORRECT_RESPONSE.value) == 1
     assert Key.DOCUMENT not in _item_cache2(download_pipeline2, download_item)
-
-
-def test_download_and_cache_counts_incorrect_status(
-    download_item: GesetzVorgang,
-    download_pipeline: DownloadDocuments,
-    download_engine: MagicMock,
-) -> None:
-    """A non-200 download response is counted and not cached."""
-    download_engine.download_async.return_value = Response(url=str(DOCUMENT_URL), status=HTTPStatus.NOT_FOUND)
-
-    asyncio.run(download_pipeline.process_item(download_item))
-
-    assert download_pipeline.stats.get_value(DokumentCounter.DOWNLOAD_FAILED_INCORRECT_STATUS.value) == 1
-    assert Key.DOCUMENT not in _item_cache(download_pipeline, download_item)
 
 
 def test_download_and_cache2_counts_incorrect_status(

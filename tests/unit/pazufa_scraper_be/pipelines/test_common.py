@@ -1,18 +1,13 @@
-from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 import pytest
-from pydantic import HttpUrl
 from scrapy import Spider
 from scrapy.crawler import Crawler
 from scrapy.settings import Settings
 from scrapy.statscollectors import StatsCollector
 
-from pazufa_scraper_be.pardok import GesetzVorgang, PlPrDokument
 from pazufa_scraper_be.pipelines.common import (
     BasePipeline,
-    CachePipeline,
     StatsPipeline,
     StatsReporter,
     get_wahlperiode,
@@ -116,25 +111,3 @@ def test_stats_reporter_get_value_returns_value_and_default() -> None:
     assert reporter.get_value("existing/key") == "value"
     assert reporter.get_value("missing/key") is None
     assert reporter.get_value("missing/key", 0) == 0
-
-
-def test__cache_pipeline_raises_when_cache_dir_setting_missing() -> None:
-    """Initialization fails when CACHE_DIR setting is missing."""
-    crawler = make_crawler({"WAHLPERIODE": WAHLPERIODE})
-    with pytest.raises(TypeError, match="Missing CACHE_DIR"):
-        CachePipeline(crawler)
-
-
-def test__cache_pipeline_rejects_unassociated_url(base_vorgang_data: dict[str, Any], tmp_path: Path, plpr_data: dict) -> None:
-    """A URL not belonging to the document is not cached."""
-    pipeline = CachePipeline(make_crawler({"WAHLPERIODE": WAHLPERIODE, "CACHE_DIR": tmp_path / "cache"}))
-    document = PlPrDokument.model_validate(
-        {
-            **plpr_data,
-            "additional_urls": ["https://example.com/additional.pdf"],
-        }
-    )
-    document.set_vorgang(GesetzVorgang.model_validate(base_vorgang_data))
-
-    with pytest.raises(ValueError, match="Did not setup dokument cache because given URL is unknown"):
-        pipeline.get_cache(document, HttpUrl("https://example.com/other.pdf"))

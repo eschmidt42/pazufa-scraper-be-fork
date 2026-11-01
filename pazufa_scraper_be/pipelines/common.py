@@ -135,32 +135,3 @@ class DocumentCacheFactory:
         cache_name = Path(document.art).joinpath(*relative_path.parts[1:])
 
         return Cache(base_dir=self._dok_cache_dir, name=str(cache_name))
-
-
-class CachePipeline(BasePipeline):
-    """Provide helpers for caching document downloads."""
-
-    _cache_dir: Path
-    _dok_cache_dir: Path
-
-    def init(self: Self) -> None:
-        """Resolve cache directories from crawler settings."""
-        super().init()
-
-        cache_dir = self.crawler.settings.get("CACHE_DIR")
-
-        if not isinstance(cache_dir, (str, Path)):
-            msg = "Missing CACHE_DIR setting."
-            raise TypeError(msg)
-
-        self._cache_dir = Path(cache_dir) / str(self.wahlperiode)
-        self._dok_cache_dir = self._cache_dir / DOK_CACHE_SUB_DIR_PATH
-
-    def get_cache(self: Self, document: AnyGesetzDokument, document_url: HttpUrl) -> Cache:
-        """Build a cache for a URL associated with a document."""
-        if document_url != document.lok_url and document.additional_urls and document_url not in document.additional_urls:
-            msg = f"[{document.vorgang.id} - {document.id}]: Did not setup dokument cache because given URL is unknown: {document_url}"
-            raise ValueError(msg)
-
-        cache_name = Path(document.art).joinpath(*Path(str(document_url).removeprefix(f"{DOK_BASE_URL}/{self.wahlperiode}/")).with_suffix("").parts[1:])
-        return Cache(base_dir=self._dok_cache_dir, name=str(cache_name))
