@@ -7,21 +7,12 @@ from scrapy.settings import Settings
 from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.pipelines.common import (
-    BasePipeline,
     StatsReporter,
     get_wahlperiode,
 )
 from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
 
 WAHLPERIODE = 19
-
-
-class ConcreteBasePipeline(BasePipeline):
-    """Concrete pipeline for testing the abstract base class."""
-
-    def init(self) -> None:
-        """Mark the test pipeline as initialized."""
-        self.initialized = True
 
 
 def make_crawler(settings: dict | None = None, stats: StatsCollector | None = None) -> Crawler:
@@ -46,31 +37,6 @@ def test_get_wahlperiode_raises_when_setting_is_none() -> None:
     crawler = make_crawler()
     with patch.object(crawler.settings, "getint", return_value=None), pytest.raises(ValueError, match="Missing WAHLPERIODE"):
         get_wahlperiode(crawler)
-
-
-def test__base_pipeline_from_crawler_initializes_pipeline() -> None:
-    """from_crawler creates a pipeline and passes through the crawler."""
-    crawler = make_crawler({"WAHLPERIODE": WAHLPERIODE})
-
-    pipeline = ConcreteBasePipeline.from_crawler(crawler)
-
-    assert pipeline.crawler is crawler
-    assert pipeline.wahlperiode == WAHLPERIODE
-    assert pipeline.initialized is True
-
-
-def test__base_pipeline_uses_scrapy_default_for_missing_wahlperiode() -> None:
-    """Construction uses Scrapy's zero default when WAHLPERIODE is missing."""
-    pipeline = ConcreteBasePipeline(make_crawler())
-
-    assert pipeline.wahlperiode == 0
-
-
-def test__base_pipeline_raises_when_wahlperiode_is_none() -> None:
-    """Construction fails when the settings object returns None."""
-    crawler = make_crawler()
-    with patch.object(crawler.settings, "getint", return_value=None), pytest.raises(ValueError, match="Missing WAHLPERIODE"):
-        ConcreteBasePipeline(crawler)
 
 
 def test_stats_reporter_increments_enum_and_string_counters() -> None:

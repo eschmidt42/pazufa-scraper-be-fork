@@ -1,7 +1,5 @@
 import logging
-from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Self
 
 from pydantic import HttpUrl
 from scrapy.crawler import Crawler
@@ -51,30 +49,6 @@ def get_wahlperiode(crawler: Crawler) -> int:
         raise ValueError(msg)
 
     return wahlperiode
-
-
-class BasePipeline(ABC):
-    """Provide shared crawler initialization for pipeline implementations."""
-
-    crawler: Crawler
-    wahlperiode: int
-
-    @classmethod
-    def from_crawler(cls, crawler: Crawler) -> Self:
-        """Create a pipeline instance from a Scrapy crawler."""
-        return cls(crawler=crawler)
-
-    def __init__(self: Self, crawler: Crawler) -> None:
-        """Store the crawler and initialize pipeline-specific state."""
-        self.crawler = crawler
-        self.wahlperiode = get_wahlperiode(crawler)
-
-        self.init()
-
-    @abstractmethod
-    def init(self: Self) -> None:
-        """Initialize state specific to the concrete pipeline."""
-        ...
 
 
 def get_cache_dir(crawler: Crawler) -> Path:
