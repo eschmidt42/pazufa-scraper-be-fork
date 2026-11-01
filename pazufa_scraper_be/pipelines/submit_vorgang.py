@@ -36,6 +36,23 @@ def get_client(*, token: str | None, url: str) -> AuthenticatedClient | None:
     return None
 
 
+def api_config_guard(api_url: str | None, api_token: str | None) -> None:
+    """Guards against improper api config."""
+    if api_token is not None and api_url is None:
+        msg = "If API_TOKEN is set, API_URL setting is required."
+        raise ValueError(msg)
+
+    msg = "API_TOKEN is not set. Will not submit to backend."
+    logger.info(msg)
+
+
+def uuid_guard(scraper_uuid: UUID | None) -> None:
+    """Guards against missing uui value."""
+    if scraper_uuid is None:
+        msg = "Missing SCRAPER_UUID setting."
+        raise ValueError(msg)
+
+
 class SubmitVorgang:
     """Pipeline that submits a built Vorgang to the PaZuFa API."""
 
@@ -51,18 +68,8 @@ class SubmitVorgang:
         api_url = crawler.settings.get("API_URL", None)
         api_token = crawler.settings.get("API_TOKEN", None)
 
-        if scraper_uuid is None:
-            msg = "Missing SCRAPER_UUID setting."
-            raise ValueError(msg)
-
-        if api_token is not None:
-            if api_url is None:
-                msg = "If API_TOKEN is set, API_URL setting is required."
-                raise ValueError(msg)
-
-        else:
-            msg = "API_TOKEN is not set. Will not submit to backend."
-            logger.info(msg)
+        uuid_guard(scraper_uuid)
+        api_config_guard(api_url, api_token)
 
         return cls(
             api_url=api_url,
