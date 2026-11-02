@@ -38,8 +38,9 @@ def api_config_guard(api_url: str | None, api_token: str | None) -> None:
         msg = "If API_TOKEN is set, API_URL setting is required."
         raise ValueError(msg)
 
-    msg = "API_TOKEN is not set. Will not submit to backend."
-    logger.info(msg)
+    if api_token is None:
+        msg = "API_TOKEN is not set. Will not submit to backend."
+        logger.info(msg)
 
 
 def uuid_guard(scraper_uuid: UUID | None) -> None:
