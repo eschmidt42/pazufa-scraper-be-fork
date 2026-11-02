@@ -1,4 +1,4 @@
-from pazufa_scraper_be.pipelines.build_vorgang.build_vorgang import BuildPaZuFaVorgang
+from pazufa_scraper_be.pipelines.build_vorgang import BuildPaZuFaVorgang
 from pazufa_scraper_be.pipelines.documents.download_documents import DownloadDocuments
 from pazufa_scraper_be.pipelines.documents.extract_text import ExtractText
 from pazufa_scraper_be.pipelines.documents.prepare_document_urls import PrepareDocumentUrls

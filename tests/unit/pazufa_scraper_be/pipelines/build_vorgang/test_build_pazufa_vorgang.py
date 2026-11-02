@@ -15,7 +15,7 @@ from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang
-from pazufa_scraper_be.pipelines.build_vorgang.build_vorgang import BuildPaZuFaVorgang
+from pazufa_scraper_be.pipelines.build_vorgang import BuildPaZuFaVorgang
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 
 if TYPE_CHECKING:
