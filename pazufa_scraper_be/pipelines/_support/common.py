@@ -8,7 +8,7 @@ from scrapy.statscollectors import StatsCollector, StatsT
 from pazufa_scraper_be.cache import Cache
 from pazufa_scraper_be.constants import DOK_BASE_URL, DOK_CACHE_SUB_DIR_PATH
 from pazufa_scraper_be.pardok import AnyGesetzDokument
-from pazufa_scraper_be.pipelines.stats_counter import StatsCounter
+from pazufa_scraper_be.pipelines._support.stats_counter import StatsCounter
 
 logger = logging.getLogger(__name__)
 

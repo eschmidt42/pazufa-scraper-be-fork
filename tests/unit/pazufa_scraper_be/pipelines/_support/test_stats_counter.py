@@ -1,6 +1,6 @@
 import pytest
 
-from pazufa_scraper_be.pipelines.stats_counter import LLMCounter
+from pazufa_scraper_be.pipelines._support.stats_counter import LLMCounter
 
 
 @pytest.mark.parametrize(

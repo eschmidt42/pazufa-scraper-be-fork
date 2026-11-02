@@ -15,8 +15,8 @@ from scrapy.crawler import Crawler
 
 from pazufa_scraper_be.constants import SUBMISSION_ERROR_GRACE_PERIOD_DAYS
 from pazufa_scraper_be.pipeline_guards import api_config_guard, uuid_guard, vorgang_guard
-from pazufa_scraper_be.pipelines.common import StatsReporter
-from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
+from pazufa_scraper_be.pipelines._support.common import StatsReporter
+from pazufa_scraper_be.pipelines._support.stats_counter import VorgangCounter
 
 logger = logging.getLogger(__name__)
 

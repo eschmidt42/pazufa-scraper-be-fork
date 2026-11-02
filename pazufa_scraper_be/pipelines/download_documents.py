@@ -14,8 +14,8 @@ from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.constants import DOCUMENT_CHECK_MODIFIED_EVERY_DAYS
 from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang
 from pazufa_scraper_be.pipeline_guards import engine_guard, gesetzvorgang_guard
-from pazufa_scraper_be.pipelines.common import DocumentCacheFactory, StatsReporter, get_wahlperiode
-from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
+from pazufa_scraper_be.pipelines._support.common import DocumentCacheFactory, StatsReporter, get_wahlperiode
+from pazufa_scraper_be.pipelines._support.stats_counter import DokumentCounter
 
 logger = logging.getLogger(__name__)
 

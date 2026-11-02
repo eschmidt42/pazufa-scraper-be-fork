@@ -14,8 +14,9 @@ from scrapy.exceptions import DropItem
 from pazufa_scraper_be.constants import ANGENOMMEN, VERTAGT
 from pazufa_scraper_be.pardok import APrDokument, DokTyp, DrsDokument, GesetzVorgang, GVBlDokument, PlPrDokument
 from pazufa_scraper_be.pipeline_guards import gesetzvorgang_guard
-from pazufa_scraper_be.pipelines.build_vorgang.build_pazufa_dokument import build_pazufa_dokument
-from pazufa_scraper_be.pipelines.build_vorgang.rules import (
+from pazufa_scraper_be.pipelines._support.build_pazufa_dokument import build_pazufa_dokument
+from pazufa_scraper_be.pipelines._support.common import DocumentCacheFactory, StatsReporter, get_wahlperiode
+from pazufa_scraper_be.pipelines._support.rules import (
     BackwardMergeRule,
     DropRule,
     ForwardMergeRule,
@@ -24,7 +25,8 @@ from pazufa_scraper_be.pipelines.build_vorgang.rules import (
     get_change_abstract_transform_fn,
     get_change_urheber_transform_fn,
 )
-from pazufa_scraper_be.pipelines.build_vorgang.utils import (
+from pazufa_scraper_be.pipelines._support.stats_counter import VorgangCounter
+from pazufa_scraper_be.pipelines._support.utils import (
     DokumentContainer,
     check_and_create_vote_outcome_station,
     get_document_schlagworte,
@@ -33,8 +35,6 @@ from pazufa_scraper_be.pipelines.build_vorgang.utils import (
     get_vorgang_schlagworte,
     uniqify,
 )
-from pazufa_scraper_be.pipelines.common import DocumentCacheFactory, StatsReporter, get_wahlperiode
-from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 
 if TYPE_CHECKING:
     from scrapy.crawler import Crawler

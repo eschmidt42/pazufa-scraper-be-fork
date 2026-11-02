@@ -15,8 +15,8 @@ from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang
-from pazufa_scraper_be.pipelines.documents.summarize_text import SummarizeText
-from pazufa_scraper_be.pipelines.stats_counter import LLMCounter, SummaryCounter
+from pazufa_scraper_be.pipelines._support.stats_counter import LLMCounter, SummaryCounter
+from pazufa_scraper_be.pipelines.summarize_text import SummarizeText
 
 WAHLPERIODE = 19
 
@@ -50,7 +50,7 @@ def summarize_pipeline(tmp_path: Path) -> tuple[SummarizeText, MagicMock]:
     )
     crawler.stats = StatsCollector(crawler)
 
-    with patch("pazufa_scraper_be.pipelines.documents.summarize_text.LLMConnector", return_value=connector):
+    with patch("pazufa_scraper_be.pipelines.summarize_text.LLMConnector", return_value=connector):
         pipeline = SummarizeText.from_crawler(crawler)
 
     return pipeline, connector
@@ -297,7 +297,7 @@ def test__llm_pipeline_requires_positive_timeout(timeout: int, tmp_path: Path) -
 def test__llm_pipeline_creates_connector_and_configures_litellm(tmp_path: Path) -> None:
     """Configured LLM settings are passed to LLMConnector."""
     settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token", "LLM_MODEL": "model", "LLM_TIMEOUT": 30, "CACHE_DIR": tmp_path / "cache"}
-    with patch("pazufa_scraper_be.pipelines.documents.summarize_text.LLMConnector") as connector:
+    with patch("pazufa_scraper_be.pipelines.summarize_text.LLMConnector") as connector:
         pipeline = SummarizeText.from_crawler(make_crawler(settings))
 
     assert pipeline._llm_connector is connector.return_value
