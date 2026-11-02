@@ -8,7 +8,7 @@ from scrapy import signals
 from scrapy.crawler import Crawler
 from scrapy.statscollectors import StatsCollector
 
-from pazufa_scraper_be.pipelines.stats_counter import PAZUFA, VorgangCounter
+from pazufa_scraper_be.pipelines._support.stats_counter import PAZUFA, VorgangCounter
 
 logger = logging.getLogger(__name__)
 

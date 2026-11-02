@@ -13,8 +13,8 @@ from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.pardok import GesetzVorgang, PlPrDokument
 from pazufa_scraper_be.pardok.url import UrlResolution
+from pazufa_scraper_be.pipelines._support.stats_counter import DokumentCounter
 from pazufa_scraper_be.pipelines.documents.prepare_document_urls import PrepareDocumentUrls
-from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
 
 
 @pytest.fixture

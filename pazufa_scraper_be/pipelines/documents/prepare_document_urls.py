@@ -7,7 +7,7 @@ from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang
 from pazufa_scraper_be.pardok.url import UrlResolution, add_additional_urls, add_missing_plprdokument_primary_url, fix_url, resolve_document_urls
 from pazufa_scraper_be.pipeline_guards import engine_guard, gesetzvorgang_guard
 from pazufa_scraper_be.pipelines._support.common import StatsReporter, get_wahlperiode
-from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
+from pazufa_scraper_be.pipelines._support.stats_counter import DokumentCounter
 
 logger = logging.getLogger(__name__)
 

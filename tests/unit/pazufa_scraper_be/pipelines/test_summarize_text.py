@@ -15,8 +15,8 @@ from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang
+from pazufa_scraper_be.pipelines._support.stats_counter import LLMCounter, SummaryCounter
 from pazufa_scraper_be.pipelines.documents.summarize_text import SummarizeText
-from pazufa_scraper_be.pipelines.stats_counter import LLMCounter, SummaryCounter
 
 WAHLPERIODE = 19
 

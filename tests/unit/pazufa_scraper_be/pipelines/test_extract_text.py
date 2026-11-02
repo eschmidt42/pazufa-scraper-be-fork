@@ -13,11 +13,11 @@ from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.cache import Key
 from pazufa_scraper_be.pardok import GesetzVorgang
+from pazufa_scraper_be.pipelines._support.stats_counter import TextCounter
 from pazufa_scraper_be.pipelines.documents.extract_text import (
     ExtractText,
     extract_text_with_ocr_backup,
 )
-from pazufa_scraper_be.pipelines.stats_counter import TextCounter
 
 
 @pytest.fixture

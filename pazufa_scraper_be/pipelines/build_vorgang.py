@@ -25,6 +25,7 @@ from pazufa_scraper_be.pipelines._support.rules import (
     get_change_abstract_transform_fn,
     get_change_urheber_transform_fn,
 )
+from pazufa_scraper_be.pipelines._support.stats_counter import VorgangCounter
 from pazufa_scraper_be.pipelines._support.utils import (
     DokumentContainer,
     check_and_create_vote_outcome_station,
@@ -34,7 +35,6 @@ from pazufa_scraper_be.pipelines._support.utils import (
     get_vorgang_schlagworte,
     uniqify,
 )
-from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 
 if TYPE_CHECKING:
     from scrapy.crawler import Crawler

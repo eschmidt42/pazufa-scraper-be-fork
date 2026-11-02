@@ -5,7 +5,7 @@ from scrapy.exceptions import DropItem
 
 from pazufa_scraper_be.pardok import GesetzVorgang
 from pazufa_scraper_be.pipelines._support.common import StatsReporter
-from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
+from pazufa_scraper_be.pipelines._support.stats_counter import VorgangCounter
 
 
 class HandleErrors:

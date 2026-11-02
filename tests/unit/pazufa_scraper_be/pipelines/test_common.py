@@ -10,7 +10,7 @@ from pazufa_scraper_be.pipelines._support.common import (
     StatsReporter,
     get_wahlperiode,
 )
-from pazufa_scraper_be.pipelines.stats_counter import DokumentCounter
+from pazufa_scraper_be.pipelines._support.stats_counter import DokumentCounter
 
 WAHLPERIODE = 19
 

@@ -11,7 +11,7 @@ from pazufa_scraper_be.pardok import AnyGesetzDokument, DrsDokument, GesetzVorga
 from pazufa_scraper_be.pardok.dokument import DeskTitelSbMixin, Protokoll
 from pazufa_scraper_be.pipeline_guards import gesetzvorgang_guard
 from pazufa_scraper_be.pipelines._support.common import DocumentCacheFactory, StatsReporter
-from pazufa_scraper_be.pipelines.stats_counter import LLMCounter, SummaryCounter
+from pazufa_scraper_be.pipelines._support.stats_counter import LLMCounter, SummaryCounter
 
 
 class LLMConfig(NamedTuple):

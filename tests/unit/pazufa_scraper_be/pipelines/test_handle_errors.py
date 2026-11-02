@@ -8,8 +8,8 @@ from scrapy.settings import Settings
 from scrapy.statscollectors import StatsCollector
 
 from pazufa_scraper_be.pardok import GesetzVorgang
+from pazufa_scraper_be.pipelines._support.stats_counter import VorgangCounter
 from pazufa_scraper_be.pipelines.handle_errors import HandleErrors
-from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 
 
 @pytest.fixture
