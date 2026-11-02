@@ -15,6 +15,7 @@ from pazufa_scraper_be.constants import ANGENOMMEN, VERTAGT
 from pazufa_scraper_be.pardok import APrDokument, DokTyp, DrsDokument, GesetzVorgang, GVBlDokument, PlPrDokument
 from pazufa_scraper_be.pipeline_guards import gesetzvorgang_guard
 from pazufa_scraper_be.pipelines._support.build_pazufa_dokument import build_pazufa_dokument
+from pazufa_scraper_be.pipelines._support.common import DocumentCacheFactory, StatsReporter, get_wahlperiode
 from pazufa_scraper_be.pipelines._support.rules import (
     BackwardMergeRule,
     DropRule,
@@ -33,7 +34,6 @@ from pazufa_scraper_be.pipelines._support.utils import (
     get_vorgang_schlagworte,
     uniqify,
 )
-from pazufa_scraper_be.pipelines.common import DocumentCacheFactory, StatsReporter, get_wahlperiode
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 
 if TYPE_CHECKING:

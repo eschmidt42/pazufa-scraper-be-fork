@@ -4,7 +4,7 @@ from scrapy.crawler import Crawler
 from scrapy.exceptions import DropItem
 
 from pazufa_scraper_be.pardok import GesetzVorgang
-from pazufa_scraper_be.pipelines.common import StatsReporter
+from pazufa_scraper_be.pipelines._support.common import StatsReporter
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 
 

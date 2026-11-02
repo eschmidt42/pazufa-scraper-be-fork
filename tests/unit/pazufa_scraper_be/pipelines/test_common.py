@@ -6,7 +6,7 @@ from scrapy.crawler import Crawler
 from scrapy.settings import Settings
 from scrapy.statscollectors import StatsCollector
 
-from pazufa_scraper_be.pipelines.common import (
+from pazufa_scraper_be.pipelines._support.common import (
     StatsReporter,
     get_wahlperiode,
 )
