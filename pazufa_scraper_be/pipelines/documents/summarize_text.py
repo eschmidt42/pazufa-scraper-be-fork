@@ -58,10 +58,11 @@ class SummarizeText:
     @classmethod
     def from_crawler(cls, crawler: Crawler) -> "SummarizeText":
         """Create the pipeline with dependencies initialized from the crawler."""
+        _token = crawler.settings.get("LLM_TOKEN", None)
         config = LLMConfig(
-            token=crawler.settings.get("LLM_TOKEN", None),
+            token=_token,
             model_name=crawler.settings.get("LLM_MODEL", None),
-            timeout=crawler.settings.getint("LLM_TIMEOUT"),
+            timeout=crawler.settings.getint("LLM_TIMEOUT") if _token else None,
         )
         llm_config_guard(config)
 
