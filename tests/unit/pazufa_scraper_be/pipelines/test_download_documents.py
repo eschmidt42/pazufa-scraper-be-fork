@@ -18,7 +18,7 @@ from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.constants import DOCUMENT_CHECK_MODIFIED_EVERY_DAYS
 from pazufa_scraper_be.pardok import GesetzVorgang
 from pazufa_scraper_be.pipelines._support.stats_counter import DokumentCounter
-from pazufa_scraper_be.pipelines.documents.download_documents import (
+from pazufa_scraper_be.pipelines.download_documents import (
     LAST_MODIFIED_TIME_FORMAT,
     DownloadDocuments,
     _fetch_last_modified,
