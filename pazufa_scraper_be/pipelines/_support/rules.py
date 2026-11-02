@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from pazufa_corelib.api_client.models import Autor
 
 from pazufa_scraper_be.pardok import DrsDokument
-from pazufa_scraper_be.pipelines.build_vorgang.utils import DokumentContainer
+from pazufa_scraper_be.pipelines._support.utils import DokumentContainer
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence

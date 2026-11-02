@@ -13,7 +13,7 @@ from pazufa_corelib.normalization import hash_bytes, hash_text
 from pazufa_scraper_be.cache import Key
 from pazufa_scraper_be.pardok import APrDokument, BaseGesetzDokument, DokTyp, DrsDokument, GVBlDokument, PlPrDokument
 from pazufa_scraper_be.pardok.dokument import AnyGesetzDokument, DokArt, ProtokollTyp
-from pazufa_scraper_be.pipelines.build_vorgang.utils import get_document_schlagworte
+from pazufa_scraper_be.pipelines._support.utils import get_document_schlagworte
 
 if TYPE_CHECKING:
     from pydantic import HttpUrl

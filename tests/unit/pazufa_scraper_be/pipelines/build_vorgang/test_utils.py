@@ -8,7 +8,7 @@ from pazufa_corelib.api_client.types import UNSET
 
 from pazufa_scraper_be.pardok.dokument import parse_dokument
 from pazufa_scraper_be.pardok.vorgang import GesetzVorgang
-from pazufa_scraper_be.pipelines.build_vorgang.utils import (
+from pazufa_scraper_be.pipelines._support.utils import (
     check_and_create_vote_outcome_station,
     get_document_schlagworte,
     get_vorgang_schlagworte,

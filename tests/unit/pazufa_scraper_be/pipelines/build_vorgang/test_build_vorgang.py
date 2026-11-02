@@ -7,8 +7,8 @@ from pazufa_corelib.api_client.models import Dokument as PaZuFaDokument
 from pazufa_corelib.api_client.types import UNSET
 
 from pazufa_scraper_be.pardok import PlPrDokument
+from pazufa_scraper_be.pipelines._support.utils import DokumentContainer
 from pazufa_scraper_be.pipelines.build_vorgang.build_vorgang import _merge_schlagworte
-from pazufa_scraper_be.pipelines.build_vorgang.utils import DokumentContainer
 
 
 def _make_dok_container(pardok_data: dict[str, Any], pazufa_doks: list[PaZuFaDokument]) -> DokumentContainer:

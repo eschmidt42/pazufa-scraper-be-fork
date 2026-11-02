@@ -23,7 +23,7 @@ from pazufa_scraper_be.pardok.dokument import (
     ProtokollTyp,
 )
 from pazufa_scraper_be.pardok.vorgang import GesetzVorgang
-from pazufa_scraper_be.pipelines.build_vorgang.build_pazufa_dokument import (
+from pazufa_scraper_be.pipelines._support.build_pazufa_dokument import (
     _check_summary_file,
     _check_text_file,
     _clean_urheber,
