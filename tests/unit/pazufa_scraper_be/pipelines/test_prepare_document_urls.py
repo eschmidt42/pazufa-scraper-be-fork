@@ -14,7 +14,7 @@ from scrapy.statscollectors import StatsCollector
 from pazufa_scraper_be.pardok import GesetzVorgang, PlPrDokument
 from pazufa_scraper_be.pardok.url import UrlResolution
 from pazufa_scraper_be.pipelines._support.stats_counter import DokumentCounter
-from pazufa_scraper_be.pipelines.documents.prepare_document_urls import PrepareDocumentUrls
+from pazufa_scraper_be.pipelines.prepare_document_urls import PrepareDocumentUrls
 
 
 @pytest.fixture
@@ -66,7 +66,7 @@ def test_prepare_document_urls_normalizes_and_prepares_document_urls(
     )
 
     with patch(
-        "pazufa_scraper_be.pipelines.documents.prepare_document_urls.resolve_document_urls",
+        "pazufa_scraper_be.pipelines.prepare_document_urls.resolve_document_urls",
         new_callable=AsyncMock,
         side_effect=[
             (None, UrlResolution(primary_was_reachable=True, recovered_from=None, pruned=[])),
@@ -123,7 +123,7 @@ def test_prepare_document_urls_counts_resolver_results(
     with (
         caplog.at_level(logging.WARNING),
         patch(
-            "pazufa_scraper_be.pipelines.documents.prepare_document_urls.resolve_document_urls",
+            "pazufa_scraper_be.pipelines.prepare_document_urls.resolve_document_urls",
             new_callable=AsyncMock,
             side_effect=results,
         ),
