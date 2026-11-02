@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -16,6 +17,15 @@ from pazufa_scraper_be.cache import Cache, Key
 from pazufa_scraper_be.pardok import AnyGesetzDokument, GesetzVorgang
 from pazufa_scraper_be.pipelines.documents.summarize_text import SummarizeText
 from pazufa_scraper_be.pipelines.stats_counter import LLMCounter, SummaryCounter
+
+WAHLPERIODE = 19
+
+
+def make_crawler(settings: dict | None = None, stats: StatsCollector | None = None) -> Crawler:
+    """Create a minimal crawler double."""
+    crawler = Crawler(Spider, Settings(settings or {}))
+    crawler.stats = stats or StatsCollector(crawler)
+    return crawler
 
 
 @pytest.fixture
@@ -40,15 +50,15 @@ def summarize_pipeline(tmp_path: Path) -> tuple[SummarizeText, MagicMock]:
     )
     crawler.stats = StatsCollector(crawler)
 
-    with patch("pazufa_scraper_be.pipelines._base.LLMConnector", return_value=connector):
-        pipeline = SummarizeText(crawler)
+    with patch("pazufa_scraper_be.pipelines.documents.summarize_text.LLMConnector", return_value=connector):
+        pipeline = SummarizeText.from_crawler(crawler)
 
     return pipeline, connector
 
 
 def _cache_for_document(pipeline: SummarizeText, document: AnyGesetzDokument) -> Cache:
     assert document.lok_url is not None
-    return pipeline.get_cache(document=document, document_url=document.lok_url)
+    return pipeline._cache_factory.for_document(document=document, url=document.lok_url)
 
 
 def test_summarize_pipeline_rejects_non_vorgang(summarize_pipeline: tuple[SummarizeText, MagicMock]) -> None:
@@ -67,14 +77,14 @@ def test_summarize_pipeline_skips_when_llm_is_disabled(
 ) -> None:
     """An item is returned unchanged when no LLM connector is configured."""
     pipeline, connector = summarize_pipeline
-    pipeline.llm_connector = None
+    pipeline._llm_connector = None
     item = GesetzVorgang.model_validate({**base_vorgang_data, "Dokument": [drs_data]})
 
     result = asyncio.run(pipeline.process_item(item))
 
     assert result is item
     connector.summarize_dokument.assert_not_awaited()
-    assert pipeline.stats.get_value(SummaryCounter.CACHE_MISS.value) is None
+    assert pipeline._stats.get_value(SummaryCounter.CACHE_MISS.value) is None
 
 
 def test_summarize_pipeline_skips_missing_text(
@@ -89,7 +99,7 @@ def test_summarize_pipeline_skips_missing_text(
     asyncio.run(pipeline.process_item(item))
 
     connector.summarize_dokument.assert_not_awaited()
-    assert pipeline.stats.get_value(SummaryCounter.CACHE_MISS.value) is None
+    assert pipeline._stats.get_value(SummaryCounter.CACHE_MISS.value) is None
 
 
 def test_summarize_pipeline_skips_ignored_document(
@@ -106,7 +116,7 @@ def test_summarize_pipeline_skips_ignored_document(
     asyncio.run(pipeline.process_item(item))
 
     connector.summarize_dokument.assert_not_awaited()
-    assert pipeline.stats.get_value(SummaryCounter.IGNORE.value) == 1
+    assert pipeline._stats.get_value(SummaryCounter.IGNORE.value) == 1
 
 
 def test_summarize_pipeline_links_cached_model_summary(
@@ -128,7 +138,7 @@ def test_summarize_pipeline_links_cached_model_summary(
     assert summary_file.is_symlink()
     assert summary_file.read_text() == "cached summary"
     connector.summarize_dokument.assert_not_awaited()
-    assert pipeline.stats.get_value(SummaryCounter.CACHE_HIT.value) == 1
+    assert pipeline._stats.get_value(SummaryCounter.CACHE_HIT.value) == 1
 
 
 @pytest.mark.parametrize(
@@ -161,9 +171,9 @@ def test_summarize_pipeline_dispatches_and_caches_document_summary(
     assert result is item
     assert summary_file.is_symlink()
     assert summary_file.read_text() == "summary text"
-    assert pipeline.stats.get_value(SummaryCounter.CACHE_MISS.value) == 1
-    assert pipeline.stats.get_value(LLMCounter.SUMMARIZE_DONE.value) == 1
-    assert pipeline.stats.get_value(LLMCounter.summarize_art(document.art_l.lower())) == 1
+    assert pipeline._stats.get_value(SummaryCounter.CACHE_MISS.value) == 1
+    assert pipeline._stats.get_value(LLMCounter.SUMMARIZE_DONE.value) == 1
+    assert pipeline._stats.get_value(LLMCounter.summarize_art(document.art_l.lower())) == 1
 
 
 def test_summarize_pipeline_extracts_protocol_section_before_summarizing(
@@ -185,8 +195,8 @@ def test_summarize_pipeline_extracts_protocol_section_before_summarizing(
         vorgang_vnr="123/2024",
     )
     connector.summarize_dokument.assert_awaited_once_with(titel="", text="relevant text")
-    assert pipeline.stats.get_value(LLMCounter.EXTRACT_RELEVANT_SECTION_DONE.value) == 1
-    assert pipeline.stats.get_value(LLMCounter.summarize_art(item.dokumente[0].art_l.lower())) == 1
+    assert pipeline._stats.get_value(LLMCounter.EXTRACT_RELEVANT_SECTION_DONE.value) == 1
+    assert pipeline._stats.get_value(LLMCounter.summarize_art(item.dokumente[0].art_l.lower())) == 1
 
 
 def test_summarize_pipeline_ignores_protocol_without_relevant_section(
@@ -205,8 +215,8 @@ def test_summarize_pipeline_ignores_protocol_without_relevant_section(
 
     assert cache[Key.SUMMARY_IGNORE] == "Ignoring because no relevant section was found."
     connector.summarize_dokument.assert_not_awaited()
-    assert pipeline.stats.get_value(LLMCounter.EXTRACT_RELEVANT_SECTION_FAILED.value) == 1
-    assert pipeline.stats.get_value(LLMCounter.SUMMARIZE_FAILED_APPLICATION.value) == 1
+    assert pipeline._stats.get_value(LLMCounter.EXTRACT_RELEVANT_SECTION_FAILED.value) == 1
+    assert pipeline._stats.get_value(LLMCounter.SUMMARIZE_FAILED_APPLICATION.value) == 1
 
 
 @pytest.mark.parametrize(
@@ -234,7 +244,7 @@ def test_summarize_pipeline_does_not_cache_failed_summary(
     asyncio.run(pipeline.process_item(item))
 
     assert Key.SUMMARY not in cache
-    assert pipeline.stats.get_value(counter.value) == 1
+    assert pipeline._stats.get_value(counter.value) == 1
     assert f"[{item.id} - {item.dokumente[0].id}]" in caplog.text
     assert message in caplog.text
 
@@ -255,4 +265,40 @@ def test_summarize_pipeline_marks_provider_failure_ignored(
 
     assert cache[Key.SUMMARY_IGNORE] == "LLMProviderError('provider unavailable')"
     assert Key.SUMMARY not in cache
-    assert pipeline.stats.get_value(LLMCounter.SUMMARIZE_FAILED_PROVIDER.value) == 1
+    assert pipeline._stats.get_value(LLMCounter.SUMMARIZE_FAILED_PROVIDER.value) == 1
+
+
+def test__llm_pipeline_without_token_skips_connector(caplog: pytest.LogCaptureFixture, tmp_path: Path) -> None:
+    """Without an LLM token, summarization is disabled."""
+    with caplog.at_level(logging.INFO):
+        pipeline = SummarizeText.from_crawler(make_crawler({"WAHLPERIODE": WAHLPERIODE, "CACHE_DIR": tmp_path / "cache"}))
+
+    assert pipeline._llm_connector is None
+    assert "LLM_TOKEN is not set" in caplog.text
+
+
+def test__llm_pipeline_requires_model_when_token_is_set(tmp_path: Path) -> None:
+    """An LLM token requires a model name."""
+    settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token", "CACHE_DIR": tmp_path / "cache"}
+
+    with pytest.raises(ValueError, match="LLM_MODEL setting is required"):
+        SummarizeText.from_crawler(make_crawler(settings))
+
+
+@pytest.mark.parametrize("timeout", [0, -1])
+def test__llm_pipeline_requires_positive_timeout(timeout: int, tmp_path: Path) -> None:
+    """LLM timeout must be a positive integer."""
+    settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token", "LLM_MODEL": "model", "LLM_TIMEOUT": timeout, "CACHE_DIR": tmp_path / "cache"}
+
+    with pytest.raises(ValueError, match="Invalid LLM_TIMEOUT"):
+        SummarizeText.from_crawler(make_crawler(settings))
+
+
+def test__llm_pipeline_creates_connector_and_configures_litellm(tmp_path: Path) -> None:
+    """Configured LLM settings are passed to LLMConnector."""
+    settings = {"WAHLPERIODE": WAHLPERIODE, "LLM_TOKEN": "token", "LLM_MODEL": "model", "LLM_TIMEOUT": 30, "CACHE_DIR": tmp_path / "cache"}
+    with patch("pazufa_scraper_be.pipelines.documents.summarize_text.LLMConnector") as connector:
+        pipeline = SummarizeText.from_crawler(make_crawler(settings))
+
+    assert pipeline._llm_connector is connector.return_value
+    connector.assert_called_once_with(model="model", api_key="token", timeout_seconds=30)

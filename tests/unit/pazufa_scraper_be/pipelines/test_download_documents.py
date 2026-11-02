@@ -44,7 +44,7 @@ def download_pipeline(tmp_path: Path, download_engine: MagicMock) -> DownloadDoc
     crawler = Crawler(Spider, Settings({"WAHLPERIODE": 19, "CACHE_DIR": tmp_path}))
     crawler.stats = StatsCollector(crawler)
     crawler.engine = download_engine
-    return DownloadDocuments(crawler)
+    return DownloadDocuments.from_crawler(crawler)
 
 
 @pytest.fixture
@@ -56,7 +56,7 @@ def download_item(base_vorgang_data: dict[str, Any], plpr_data: dict[str, Any]) 
 def _item_cache(pipeline: DownloadDocuments, item: GesetzVorgang) -> Cache:
     document = item.dokumente[0]
     assert document.lok_url is not None
-    return pipeline.get_cache(document=document, document_url=document.lok_url)
+    return pipeline._cache_factory.for_document(document=document, url=document.lok_url)
 
 
 @pytest.mark.parametrize(
@@ -157,8 +157,8 @@ def test_download_and_cache_stores_document_and_metadata(
     request = call.args[0]
     assert request.method == "GET"
     assert request.callback is NO_CALLBACK
-    assert download_pipeline.stats.get_value(DokumentCounter.CACHE_MISS.value) == 1
-    assert download_pipeline.stats.get_value(DokumentCounter.DOWNLOAD_DONE.value) == 1
+    assert download_pipeline._stats.get_value(DokumentCounter.CACHE_MISS.value) == 1
+    assert download_pipeline._stats.get_value(DokumentCounter.DOWNLOAD_DONE.value) == 1
 
 
 def test_download_and_cache_skips_cached_document(
@@ -175,7 +175,7 @@ def test_download_and_cache_skips_cached_document(
 
     assert result is download_item
     download_engine.download_async.assert_not_awaited()
-    assert download_pipeline.stats.get_value(DokumentCounter.CACHE_HIT.value) == 1
+    assert download_pipeline._stats.get_value(DokumentCounter.CACHE_HIT.value) == 1
 
 
 def test_download_and_cache_redownloads_modified_document(
@@ -199,8 +199,8 @@ def test_download_and_cache_redownloads_modified_document(
     assert cache[Key.DOCUMENT] == b"new contents"
     assert cache[Key.LAST_MODIFIED] == datetime.strptime(modified_header, LAST_MODIFIED_TIME_FORMAT).replace(tzinfo=UTC)
     assert download_engine.download_async.await_count == 2
-    assert download_pipeline.stats.get_value(DokumentCounter.CACHE_RESET.value) == 1
-    assert download_pipeline.stats.get_value(DokumentCounter.DOWNLOAD_DONE.value) == 1
+    assert download_pipeline._stats.get_value(DokumentCounter.CACHE_RESET.value) == 1
+    assert download_pipeline._stats.get_value(DokumentCounter.DOWNLOAD_DONE.value) == 1
 
 
 def test_download_and_cache_skips_document_from_another_wahlperiode(
@@ -215,7 +215,7 @@ def test_download_and_cache_skips_document_from_another_wahlperiode(
     asyncio.run(download_pipeline.process_item(item))
 
     download_engine.download_async.assert_not_awaited()
-    assert download_pipeline.stats.get_value(DokumentCounter.CACHE_MISS.value) is None
+    assert download_pipeline._stats.get_value(DokumentCounter.CACHE_MISS.value) is None
 
 
 def test_download_and_cache_counts_incorrect_response(
@@ -228,7 +228,7 @@ def test_download_and_cache_counts_incorrect_response(
 
     asyncio.run(download_pipeline.process_item(download_item))
 
-    assert download_pipeline.stats.get_value(DokumentCounter.DOWNLOAD_FAILED_INCORRECT_RESPONSE.value) == 1
+    assert download_pipeline._stats.get_value(DokumentCounter.DOWNLOAD_FAILED_INCORRECT_RESPONSE.value) == 1
     assert Key.DOCUMENT not in _item_cache(download_pipeline, download_item)
 
 
@@ -242,5 +242,5 @@ def test_download_and_cache_counts_incorrect_status(
 
     asyncio.run(download_pipeline.process_item(download_item))
 
-    assert download_pipeline.stats.get_value(DokumentCounter.DOWNLOAD_FAILED_INCORRECT_STATUS.value) == 1
+    assert download_pipeline._stats.get_value(DokumentCounter.DOWNLOAD_FAILED_INCORRECT_STATUS.value) == 1
     assert Key.DOCUMENT not in _item_cache(download_pipeline, download_item)

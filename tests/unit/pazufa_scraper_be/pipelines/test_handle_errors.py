@@ -17,7 +17,7 @@ def handle_errors_pipeline() -> HandleErrors:
     """Create a HandleErrors pipeline with a minimal crawler."""
     crawler = Crawler(Spider, Settings({"WAHLPERIODE": 19}))
     crawler.stats = StatsCollector(crawler)
-    return HandleErrors(crawler)
+    return HandleErrors.from_crawler(crawler)
 
 
 def test_handle_errors_passes_through_vorgang_and_increments_total(
@@ -30,7 +30,7 @@ def test_handle_errors_passes_through_vorgang_and_increments_total(
     result = handle_errors_pipeline.process_item(item)
 
     assert result is item
-    assert handle_errors_pipeline.stats.get_value(VorgangCounter.TOTAL.value) == 1
+    assert handle_errors_pipeline._stats.get_value(VorgangCounter.TOTAL.value) == 1
 
 
 def test_handle_errors_drops_error_dict_and_increments_incorrect(
@@ -43,7 +43,7 @@ def test_handle_errors_drops_error_dict_and_increments_incorrect(
     with pytest.raises(DropItem, match="Could not properly parse Vorgang 'vorg123'"):
         handle_errors_pipeline.process_item(item)
 
-    assert handle_errors_pipeline.stats.get_value(VorgangCounter.DROP_INCORRECT.value) == 1
+    assert handle_errors_pipeline._stats.get_value(VorgangCounter.DROP_INCORRECT.value) == 1
 
 
 def test_handle_errors_drops_unexpected_item_without_incrementing_stats(
@@ -55,4 +55,4 @@ def test_handle_errors_drops_unexpected_item_without_incrementing_stats(
     with pytest.raises(DropItem, match="This should not happen"):
         handle_errors_pipeline.process_item(item)
 
-    assert handle_errors_pipeline.stats.get_stats() == {}
+    assert handle_errors_pipeline._stats.get_stats() == {}

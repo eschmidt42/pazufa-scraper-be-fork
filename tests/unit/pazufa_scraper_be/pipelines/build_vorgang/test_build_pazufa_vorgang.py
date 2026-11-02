@@ -36,12 +36,12 @@ def build_pipeline(tmp_path: Path) -> BuildPaZuFaVorgang:
         ),
     )
     crawler.stats = StatsCollector(crawler)
-    return BuildPaZuFaVorgang(crawler)
+    return BuildPaZuFaVorgang.from_crawler(crawler)
 
 
 def _cache_for_document(pipeline: BuildPaZuFaVorgang, document: AnyGesetzDokument) -> Cache:
     assert document.lok_url is not None
-    return pipeline.get_cache(document=document, document_url=document.lok_url)
+    return pipeline._cache_factory.for_document(document=document, url=document.lok_url)
 
 
 def test_build_pazufa_vorgang_rejects_non_vorgang(build_pipeline: BuildPaZuFaVorgang) -> None:
@@ -100,7 +100,7 @@ def test_build_pazufa_vorgang_drops_when_no_documents_can_be_built(
     with pytest.raises(DropItem, match="Could not create any Dokument from Vorgang"):
         asyncio.run(build_pipeline.process_item(item))
 
-    assert build_pipeline.stats.get_value(VorgangCounter.DROP_NO_DOCUMENTS.value) == 1
+    assert build_pipeline._stats.get_value(VorgangCounter.DROP_NO_DOCUMENTS.value) == 1
 
 
 def test_build_pazufa_vorgang_drops_when_rules_remove_all_stations(
@@ -124,7 +124,7 @@ def test_build_pazufa_vorgang_drops_when_rules_remove_all_stations(
     with pytest.raises(DropItem, match="Could not create any Stations"):
         asyncio.run(build_pipeline.process_item(item))
 
-    assert build_pipeline.stats.get_value(VorgangCounter.DROP_NO_STATIONS.value) == 1
+    assert build_pipeline._stats.get_value(VorgangCounter.DROP_NO_STATIONS.value) == 1
 
 
 def test_build_pazufa_vorgang_drops_single_gvbl_as_out_of_scope(
@@ -138,4 +138,4 @@ def test_build_pazufa_vorgang_drops_single_gvbl_as_out_of_scope(
     with pytest.raises(DropItem, match=r"Out of scope\. Single Gesetz- und Verordnungsblatt"):
         asyncio.run(build_pipeline.process_item(item))
 
-    assert build_pipeline.stats.get_value(VorgangCounter.DROP_OUT_OF_SCOPE.value) == 1
+    assert build_pipeline._stats.get_value(VorgangCounter.DROP_OUT_OF_SCOPE.value) == 1

@@ -25,7 +25,7 @@ def extract_pipeline(tmp_path: Path) -> ExtractText:
     """Create an extraction pipeline with a temporary cache and Scrapy stats."""
     crawler = Crawler(Spider, Settings({"WAHLPERIODE": 19, "CACHE_DIR": tmp_path}))
     crawler.stats = StatsCollector(crawler)
-    return ExtractText(crawler)
+    return ExtractText.from_crawler(crawler)
 
 
 @pytest.fixture
@@ -102,7 +102,7 @@ def test_extract_pipeline_normalizes_and_caches_text(
     """A cache miss extracts text, removes known control characters, and records stats."""
     document = extract_item.dokumente[0]
     assert document.lok_url is not None
-    cache = extract_pipeline.get_cache(document, document.lok_url)
+    cache = extract_pipeline._cache_factory.for_document(document, document.lok_url)
     cache[Key.DOCUMENT] = b"pdf bytes"
 
     with patch(
@@ -115,8 +115,8 @@ def test_extract_pipeline_normalizes_and_caches_text(
     assert result is extract_item
     assert cache[Key.TEXT] == "ABC"
     extract.assert_awaited_once_with(document_bytes=b"pdf bytes")
-    assert extract_pipeline.stats.get_value(TextCounter.CACHE_MISS.value) == 1
-    assert extract_pipeline.stats.get_value(TextCounter.EXTRACT_DONE.value) == 1
+    assert extract_pipeline._stats.get_value(TextCounter.CACHE_MISS.value) == 1
+    assert extract_pipeline._stats.get_value(TextCounter.EXTRACT_DONE.value) == 1
 
 
 def test_extract_pipeline_skips_cached_text(
@@ -126,7 +126,7 @@ def test_extract_pipeline_skips_cached_text(
     """A document with cached text is counted as a hit without re-extraction."""
     document = extract_item.dokumente[0]
     assert document.lok_url is not None
-    cache = extract_pipeline.get_cache(document, document.lok_url)
+    cache = extract_pipeline._cache_factory.for_document(document, document.lok_url)
     cache[Key.DOCUMENT] = b"pdf bytes"
     cache[Key.TEXT] = "cached text"
 
@@ -134,7 +134,7 @@ def test_extract_pipeline_skips_cached_text(
         asyncio.run(extract_pipeline.process_item(extract_item))
 
     extract.assert_not_awaited()
-    assert extract_pipeline.stats.get_value(TextCounter.CACHE_HIT.value) == 1
+    assert extract_pipeline._stats.get_value(TextCounter.CACHE_HIT.value) == 1
 
 
 def test_extract_pipeline_skips_documents_missing_from_cache(
@@ -152,7 +152,7 @@ def test_extract_pipeline_skips_documents_missing_from_cache(
         asyncio.run(extract_pipeline.process_item(extract_item))
 
     extract.assert_not_awaited()
-    assert extract_pipeline.stats.get_value(TextCounter.CACHE_MISS.value) is None
+    assert extract_pipeline._stats.get_value(TextCounter.CACHE_MISS.value) is None
 
 
 def test_extract_pipeline_counts_and_logs_empty_text(
@@ -163,7 +163,7 @@ def test_extract_pipeline_counts_and_logs_empty_text(
     """Empty output is logged and counted without adding a text cache entry."""
     document = extract_item.dokumente[0]
     assert document.lok_url is not None
-    cache = extract_pipeline.get_cache(document, document.lok_url)
+    cache = extract_pipeline._cache_factory.for_document(document, document.lok_url)
     cache[Key.DOCUMENT] = b"pdf bytes"
 
     with patch(
@@ -174,7 +174,7 @@ def test_extract_pipeline_counts_and_logs_empty_text(
         asyncio.run(extract_pipeline.process_item(extract_item))
 
     assert Key.TEXT not in cache
-    assert extract_pipeline.stats.get_value(TextCounter.EXTRACT_FAILED_EMPTY_TEXT.value) == 1
+    assert extract_pipeline._stats.get_value(TextCounter.EXTRACT_FAILED_EMPTY_TEXT.value) == 1
     assert f"[{extract_item.id} - {document.id}]: No text extracted." in caplog.text
 
 

@@ -23,7 +23,7 @@ def prepare_document_urls_pipeline() -> PrepareDocumentUrls:
     crawler = Crawler(Spider, Settings({"WAHLPERIODE": 19}))
     crawler.stats = StatsCollector(crawler)
     crawler.engine = MagicMock()
-    return PrepareDocumentUrls(crawler)
+    return PrepareDocumentUrls.from_crawler(crawler)
 
 
 def test_prepare_document_urls_drops_unexpected_item(
@@ -42,7 +42,7 @@ def test_prepare_document_urls_raises_when_engine_is_missing(
     item = GesetzVorgang.model_validate(base_vorgang_data)
 
     with (
-        patch.object(prepare_document_urls_pipeline, "crawler", MagicMock(engine=None)),
+        patch.object(prepare_document_urls_pipeline, "_crawler", MagicMock(engine=None)),
         pytest.raises(ValueError, match=r"crawler\.engine is None"),
     ):
         asyncio.run(prepare_document_urls_pipeline.process_item(item))
@@ -130,7 +130,7 @@ def test_prepare_document_urls_counts_resolver_results(
     ):
         asyncio.run(prepare_document_urls_pipeline.process_item(item))
 
-    assert prepare_document_urls_pipeline.stats.get_value(DokumentCounter.MISSING_PRIMARY.value) == 1
-    assert prepare_document_urls_pipeline.stats.get_value(DokumentCounter.RECOVERED_FROM_ADDITIONAL.value) == 1
-    assert prepare_document_urls_pipeline.stats.get_value(DokumentCounter.ADDITIONAL_PRUNED.value) == 1
+    assert prepare_document_urls_pipeline._stats.get_value(DokumentCounter.MISSING_PRIMARY.value) == 1
+    assert prepare_document_urls_pipeline._stats.get_value(DokumentCounter.RECOVERED_FROM_ADDITIONAL.value) == 1
+    assert prepare_document_urls_pipeline._stats.get_value(DokumentCounter.ADDITIONAL_PRUNED.value) == 1
     assert "[vorg123 - missing]: Missing URL." in caplog.text

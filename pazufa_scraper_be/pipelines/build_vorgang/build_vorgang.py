@@ -13,9 +13,8 @@ from scrapy.exceptions import DropItem
 
 from pazufa_scraper_be.constants import ANGENOMMEN, VERTAGT
 from pazufa_scraper_be.pardok import APrDokument, DokTyp, DrsDokument, GesetzVorgang, GVBlDokument, PlPrDokument
-from pazufa_scraper_be.pipeline_guards import vorgang_guard
-from pazufa_scraper_be.pipelines._base import CachePipeline, StatsPipeline
-from pazufa_scraper_be.pipelines.build_vorgang import build_pazufa_dokument
+from pazufa_scraper_be.pipeline_guards import gesetzvorgang_guard
+from pazufa_scraper_be.pipelines.build_vorgang.build_pazufa_dokument import build_pazufa_dokument
 from pazufa_scraper_be.pipelines.build_vorgang.rules import (
     BackwardMergeRule,
     DropRule,
@@ -34,9 +33,11 @@ from pazufa_scraper_be.pipelines.build_vorgang.utils import (
     get_vorgang_schlagworte,
     uniqify,
 )
+from pazufa_scraper_be.pipelines.common import DocumentCacheFactory, StatsReporter, get_wahlperiode
 from pazufa_scraper_be.pipelines.stats_counter import VorgangCounter
 
 if TYPE_CHECKING:
+    from scrapy.crawler import Crawler
     from scrapy.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -124,12 +125,31 @@ def _create_api_id(settings: Settings, station_name: str) -> UUID:
     return uuid.uuid5(settings.get("SCRAPER_UUID"), station_name)
 
 
-class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
+class BuildPaZuFaVorgang:
     """Pipeline that converts a GesetzVorgang into a PaZuFa Vorgang API model."""
+
+    crawler: Crawler
+    wahlperiode: int
+    _cache_factory: DocumentCacheFactory
+    _stats: StatsReporter
+
+    @classmethod
+    def from_crawler(cls, crawler: Crawler) -> BuildPaZuFaVorgang:
+        """Create the pipeline with dependencies initialized from the crawler."""
+        return cls(
+            crawler=crawler, wahlperiode=get_wahlperiode(crawler), cache_factory=DocumentCacheFactory.from_crawler(crawler), stats=StatsReporter(crawler.stats)
+        )
+
+    def __init__(self, crawler: Crawler, wahlperiode: int, cache_factory: DocumentCacheFactory, stats: StatsReporter) -> None:
+        """Initialize the pipeline with crawler, election period, cache factory, and stats."""
+        self.crawler = crawler
+        self.wahlperiode = wahlperiode
+        self._cache_factory = cache_factory
+        self._stats = stats
 
     async def process_item(self: Self, vorgang: GesetzVorgang) -> PaZuFaVorgang:
         """Build and return a PaZuFa Vorgang from a parsed GesetzVorgang."""
-        vorgang_guard(vorgang)
+        gesetzvorgang_guard(vorgang)
         self._gvbl_guard(vorgang)
 
         dok_containers = self._build_dok_containers(vorgang)
@@ -218,7 +238,7 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
             pazufa_documents: list[Dokument] = []
 
             for dokument_url in pardok.all_urls:
-                cache = self.get_cache(document=pardok, document_url=dokument_url)
+                cache = self._cache_factory.for_document(document=pardok, url=dokument_url)
 
                 pazufa_dokument = build_pazufa_dokument(dokument=pardok, cache=cache, url=dokument_url)
 
@@ -229,7 +249,7 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
                 dok_containers.append(DokumentContainer(pardok, pazufa_documents))
 
         if len(dok_containers) == 0:
-            self.increment_stats(VorgangCounter.DROP_NO_DOCUMENTS)
+            self._stats.increment(VorgangCounter.DROP_NO_DOCUMENTS)
             msg = f"[{vorgang.id}]: Could not create any Dokument from Vorgang."
             raise DropItem(msg)
 
@@ -237,12 +257,12 @@ class BuildPaZuFaVorgang(CachePipeline, StatsPipeline):
 
     def _gvbl_guard(self, vorgang: GesetzVorgang) -> None:
         if len(vorgang.dokumente) == 1 and isinstance(vorgang.dokumente[0], GVBlDokument):
-            self.increment_stats(VorgangCounter.DROP_OUT_OF_SCOPE)
+            self._stats.increment(VorgangCounter.DROP_OUT_OF_SCOPE)
             msg = f"[{vorgang.id}]: Out of scope. Single Gesetz- und Verordnungsblatt."
             raise DropItem(msg, log_level="INFO")
 
     def _empty_dok_containers_guard(self, vorgang: GesetzVorgang, dok_containers: list[DokumentContainer]) -> None:
         if len(dok_containers) == 0:
-            self.increment_stats(VorgangCounter.DROP_NO_STATIONS)
+            self._stats.increment(VorgangCounter.DROP_NO_STATIONS)
             msg = f"[{vorgang.id}]: Could not create any Stations."
             raise DropItem(msg)
