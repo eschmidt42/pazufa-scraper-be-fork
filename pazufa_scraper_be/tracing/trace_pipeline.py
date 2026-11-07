@@ -1,10 +1,19 @@
 import inspect
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
+from enum import StrEnum, auto
 from functools import wraps
 from typing import Literal, TypedDict, cast
 
 from scrapy.exceptions import DropItem
+
+
+class OutcomesEnum(StrEnum):
+    """Pipeline outcome classifications."""
+
+    dropped = auto()
+    error = auto()
+    passed = auto()
 
 
 class _TraceBase(TypedDict):
@@ -14,17 +23,17 @@ class _TraceBase(TypedDict):
 
 
 class _DroppedTrace(_TraceBase):
-    outcome: Literal["dropped"]
+    outcome: Literal[OutcomesEnum.dropped]
     error: str
 
 
 class _ErrorTrace(_TraceBase):
-    outcome: Literal["error"]
+    outcome: Literal[OutcomesEnum.error]
     error: str
 
 
 class _PassedTrace(_TraceBase):
-    outcome: Literal["passed"]
+    outcome: Literal[OutcomesEnum.passed]
     after: object
 
 
@@ -67,25 +76,28 @@ def trace_pipeline(pipeline_cls: type[object]) -> None:
                 if inspect.isawaitable(result):
                     result = await cast("Awaitable[object]", result)
             except DropItem as exc:
-                span.set_outputs({"error": str(exc), "outcome": "dropped"})
+                span.set_outputs({"error": str(exc), "outcome": OutcomesEnum.dropped.value})
                 raise
             except Exception as exc:
-                span.set_outputs({"error": repr(exc), "outcome": "error"})
+                span.set_outputs({"error": repr(exc), "outcome": OutcomesEnum.error.value})
                 raise
             else:
-                span.set_outputs({"item": snapshot(result), "outcome": "passed"})
+                span.set_outputs({"item": snapshot(result), "outcome": OutcomesEnum.passed.value})
                 return result
 
     setattr(traced, "_trace_wrapper", True)  # noqa: B010
     setattr(pipeline_cls, "process_item", traced)  # noqa: B010
 
 
-def get_trace_from_mlflow_db(span_name: str = "single-item crawl") -> list[_TraceEvent]:
+def get_trace_from_mlflow_db(
+    *, span_name: str = "single-item crawl", tracking_uri: str = "http://127.0.0.1:5000", experiment: str = "item-pipelines-nb"
+) -> list[_TraceEvent]:
     """Constructs a list of trace events using the mlflow db."""
     import mlflow  # noqa: PLC0415
 
-    mlflow.set_tracking_uri("http://127.0.0.1:5000")
-    mlflow.set_experiment("item-pipelines-nb")
+    mlflow.set_tracking_uri(tracking_uri)
+
+    mlflow.set_experiment(experiment)
 
     matches = mlflow.search_traces(
         filter_string=f"span.name = '{span_name}'",
@@ -117,7 +129,7 @@ def get_trace_from_mlflow_db(span_name: str = "single-item crawl") -> list[_Trac
                     "stage": span.name,
                     "ms": ms,
                     "before": before,
-                    "outcome": "dropped",
+                    "outcome": OutcomesEnum.dropped,
                     "error": outputs["error"],
                 }
             )
@@ -127,7 +139,7 @@ def get_trace_from_mlflow_db(span_name: str = "single-item crawl") -> list[_Trac
                     "stage": span.name,
                     "ms": ms,
                     "before": before,
-                    "outcome": "error",
+                    "outcome": OutcomesEnum.error,
                     "error": outputs["error"],
                 }
             )
@@ -137,7 +149,7 @@ def get_trace_from_mlflow_db(span_name: str = "single-item crawl") -> list[_Trac
                     "stage": span.name,
                     "ms": ms,
                     "before": before,
-                    "outcome": "passed",
+                    "outcome": OutcomesEnum.passed,
                     "after": outputs["item"],
                 }
             )
