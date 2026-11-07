@@ -1,5 +1,3 @@
-# ruff: noqa: INP001
-
 import difflib
 import json
 from collections.abc import Sequence
