@@ -68,8 +68,10 @@ def trace_pipeline(pipeline_cls: type[object]) -> None:
                     result = await cast("Awaitable[object]", result)
             except DropItem as exc:
                 span.set_outputs({"error": str(exc), "outcome": "dropped"})
-            except Exception as exc:  # noqa: BLE001
+                raise
+            except Exception as exc:
                 span.set_outputs({"error": repr(exc), "outcome": "error"})
+                raise
             else:
                 span.set_outputs({"item": snapshot(result), "outcome": "passed"})
                 return result
