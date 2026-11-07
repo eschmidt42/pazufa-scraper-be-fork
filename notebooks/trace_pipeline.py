@@ -1,10 +1,7 @@
-# ruff: noqa: INP001
-
 import inspect
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from functools import wraps
-from time import perf_counter
 from typing import Literal, TypedDict, cast
 
 from scrapy.exceptions import DropItem
@@ -49,7 +46,7 @@ def snapshot(item: object) -> object:
     return deepcopy(item)
 
 
-def trace_pipeline(pipeline_cls: type[object], use_mlflow: bool) -> None:  # noqa: C901, FBT001
+def trace_pipeline(pipeline_cls: type[object]) -> None:
     """Wrap a pipeline's item processor and record each outcome."""
     original = cast("_ProcessItem", getattr(pipeline_cls, "process_item"))  # noqa: B009
 
@@ -57,71 +54,24 @@ def trace_pipeline(pipeline_cls: type[object], use_mlflow: bool) -> None:  # noq
     if getattr(original, "_trace_wrapper", False):
         return
 
-    if use_mlflow:
-        import mlflow  # noqa: PLC0415
+    import mlflow  # noqa: PLC0415
 
-        @wraps(original)
-        async def traced(self: object, item: object, *args: object, **kwargs: object) -> object:
-            with mlflow.start_span(name=pipeline_cls.__name__) as span:
-                span.set_inputs({"item": snapshot(item)})
-
-                try:
-                    result = original(self, item, *args, **kwargs)
-
-                    if inspect.isawaitable(result):
-                        result = await cast("Awaitable[object]", result)
-                except DropItem as exc:
-                    span.set_outputs({"error": str(exc), "outcome": "dropped"})
-                except Exception as exc:  # noqa: BLE001
-                    span.set_outputs({"error": repr(exc), "outcome": "error"})
-                else:
-                    span.set_outputs({"item": snapshot(result), "outcome": "passed"})
-                    return result
-    else:
-
-        @wraps(original)
-        async def traced(self: object, item: object, *args: object, **kwargs: object) -> object:
-            before = snapshot(item)
-            started = perf_counter()
+    @wraps(original)
+    async def traced(self: object, item: object, *args: object, **kwargs: object) -> object:
+        with mlflow.start_span(name=pipeline_cls.__name__) as span:
+            span.set_inputs({"item": snapshot(item)})
 
             try:
                 result = original(self, item, *args, **kwargs)
 
                 if inspect.isawaitable(result):
                     result = await cast("Awaitable[object]", result)
-
             except DropItem as exc:
-                trace.append(
-                    {
-                        "stage": pipeline_cls.__name__,
-                        "ms": round((perf_counter() - started) * 1000, 1),
-                        "outcome": "dropped",
-                        "before": before,
-                        "error": str(exc),
-                    }
-                )
-                raise
-            except Exception as exc:
-                trace.append(
-                    {
-                        "stage": pipeline_cls.__name__,
-                        "ms": round((perf_counter() - started) * 1000, 1),
-                        "outcome": "error",
-                        "before": before,
-                        "error": repr(exc),
-                    }
-                )
-                raise
+                span.set_outputs({"error": str(exc), "outcome": "dropped"})
+            except Exception as exc:  # noqa: BLE001
+                span.set_outputs({"error": repr(exc), "outcome": "error"})
             else:
-                trace.append(
-                    {
-                        "stage": pipeline_cls.__name__,
-                        "ms": round((perf_counter() - started) * 1000, 1),
-                        "outcome": "passed",
-                        "before": before,
-                        "after": snapshot(result),
-                    }
-                )
+                span.set_outputs({"item": snapshot(result), "outcome": "passed"})
                 return result
 
     setattr(traced, "_trace_wrapper", True)  # noqa: B010
