@@ -5,6 +5,7 @@ from enum import StrEnum, auto
 from functools import wraps
 from typing import Literal, TypedDict, cast
 
+from mlflow.entities import Trace
 from scrapy.exceptions import DropItem
 
 
@@ -89,29 +90,32 @@ def trace_pipeline(pipeline_cls: type[object]) -> None:
     setattr(pipeline_cls, "process_item", traced)  # noqa: B010
 
 
-def get_trace_from_mlflow_db(
-    *, span_name: str = "single-item crawl", tracking_uri: str = "http://127.0.0.1:5000", experiment: str = "item-pipelines-nb"
-) -> list[_TraceEvent]:
-    """Constructs a list of trace events using the mlflow db."""
+def get_traces_from_mlflow_db(
+    *, span_name: str = "single-item crawl", tracking_uri: str = "http://127.0.0.1:5000", experiment: str = "item-pipelines-nb", max_results: int | None = None
+) -> list[Trace]:
+    """Queries traches from the mlflow db."""
     import mlflow  # noqa: PLC0415
 
     mlflow.set_tracking_uri(tracking_uri)
 
     mlflow.set_experiment(experiment)
 
-    matches = mlflow.search_traces(
+    traces = mlflow.search_traces(
         filter_string=f"span.name = '{span_name}'",
         order_by=["timestamp_ms DESC"],
-        max_results=1,
+        max_results=max_results,
         return_type="list",
     )
 
-    if not matches:
+    if not traces:
         msg = f"No '{span_name}' trace found."
         raise LookupError(msg)
 
-    trace = matches[0]
+    return traces
 
+
+def convert_trace_to_events(span_name: str, trace: Trace) -> list[_TraceEvent]:
+    """Converts a trace to a list of events."""
     events: list[_TraceEvent] = []
 
     for span in sorted(trace.data.spans, key=lambda s: s.start_time_ns):
@@ -121,6 +125,11 @@ def get_trace_from_mlflow_db(
         inputs = span.inputs or {}
         outputs = span.outputs or {}
         before = inputs["item"]
+
+        if span.end_time_ns is None:
+            msg = f"Span {span.name!r} has no end timestamp."
+            raise ValueError(msg)
+
         ms = round((span.end_time_ns - span.start_time_ns) / 1_000_000, 1)
 
         if outputs.get("outcome") == "dropped":
@@ -155,3 +164,13 @@ def get_trace_from_mlflow_db(
             )
 
     return events
+
+
+def get_trace_from_mlflow_db(
+    *, span_name: str = "single-item crawl", tracking_uri: str = "http://127.0.0.1:5000", experiment: str = "item-pipelines-nb"
+) -> list[_TraceEvent]:
+    """Constructs a list of trace events using the mlflow db."""
+    traces = get_traces_from_mlflow_db(span_name=span_name, tracking_uri=tracking_uri, experiment=experiment, max_results=1)
+    trace = traces[0]
+
+    return convert_trace_to_events(span_name, trace)
