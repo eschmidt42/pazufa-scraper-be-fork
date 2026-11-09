@@ -5,6 +5,9 @@ import pytest
 from scrapy.settings import Settings
 
 from pazufa_scraper_be.pardok.vorgang import GesetzVorgang
+
+pytest.importorskip("mlflow", reason="render_pipeline imports MLflow types")
+
 from pazufa_scraper_be.tracing import spidering
 
 

@@ -1,6 +1,7 @@
 import inspect
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum, auto
 from functools import wraps
 from typing import Literal, TypedDict, cast
@@ -91,17 +92,33 @@ def trace_pipeline(pipeline_cls: type[object]) -> None:
 
 
 def get_traces_from_mlflow_db(
-    *, span_name: str = "single-item crawl", tracking_uri: str = "http://127.0.0.1:5000", experiment: str = "item-pipelines-nb", max_results: int | None = None
+    *,
+    span_name: str = "single-item crawl",
+    tracking_uri: str = "http://127.0.0.1:5000",
+    experiment: str = "item-pipelines-nb",
+    max_results: int | None = None,
+    last_minutes: int | None = None,
 ) -> list[Trace]:
-    """Queries traches from the mlflow db."""
+    """Queries traces from the mlflow db."""
     import mlflow  # noqa: PLC0415
 
     mlflow.set_tracking_uri(tracking_uri)
 
     mlflow.set_experiment(experiment)
 
+    filters = [f"span.name = '{span_name}'"]
+
+    if last_minutes:
+        if last_minutes <= 0:
+            msg = "last_minutes must be > 0."
+            raise ValueError(msg)
+
+        cutoff_ms = int((datetime.now(UTC) - timedelta(minutes=last_minutes)).timestamp() * 1_000)
+        filters.append(f"trace.timestamp_ms >= {cutoff_ms}")
+
+    filter_string = " AND ".join(filters)
     traces = mlflow.search_traces(
-        filter_string=f"span.name = '{span_name}'",
+        filter_string=filter_string,
         order_by=["timestamp_ms DESC"],
         max_results=max_results,
         return_type="list",

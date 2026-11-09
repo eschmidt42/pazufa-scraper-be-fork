@@ -9,6 +9,8 @@ from unittest.mock import MagicMock, Mock
 import pytest
 from scrapy.exceptions import DropItem
 
+pytest.importorskip("mlflow", reason="render_pipeline imports MLflow types")
+
 from pazufa_scraper_be.tracing import trace_pipeline
 
 if TYPE_CHECKING:

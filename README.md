@@ -115,6 +115,8 @@ tests
         └── {module/}test_{module}.py
 ```
 
+#### Unit Tests
+
 To run unit tests use
 
 ```bash
@@ -142,12 +144,37 @@ open htmlcov/index.html
 
 for an interactive overview.
 
-Note: Below is yet to be implemented.
+#### Integration Tests
 
-To run integration tests use
+The objective is to check that the `ITEM_PIPELINES`, given the same `xml` feed, produce the same output (at least when it comes to deterministic fields, not llm summaries or similar). We want to do this for several Vorgänge.
+
+So essentially what we want to do is trace the pipeline executions. We use `mlflow` here for that.
+
+To do the tracing of the pipelines itself we wrap the `.process_item` methods, snapshot their inputs and outputs.
+
+To create reference traces to later compare against run
 
 ```bash
-pytest -m integration
+uv run python scripts/create_integration_test_references.py
 ```
 
-Note: Integration tests are marked with `@pytest.mark.integration` and only executed when explicitly requested.
+before you do any changes to the pipelines. This writes the traces to `tests/integration-tests-mlflow.db`.
+
+Those traces can be visually inspected in your browser when you start an mlflow server, e.g. using
+
+```bash
+mlflow server \
+  --backend-store-uri "sqlite:////absolute/path/above/to/tests/integration-tests-mlflow.db" \
+  --host 127.0.0.1 \
+  --port 5000
+```
+
+Then after you've done your code changes to the pipelines you can re-run the same Vorgänge (make sure the feed file is unchanged) using
+
+```bash
+uv run pytest -m integration
+```
+
+The `integration` marked test(s) does a limited sanity check of the pipeline outputs for you. If the test(s) fail you should be provided with `item_id` / Vorgang ID identifiers.
+
+To help you understand the differences between the reference run and the test run the notebook [`notebooks/test-and-reference-run-diff.ipynb`](./notebooks/test-and-reference-run-diff.ipynb) is provided for you. It let's you inspect the inputs and outputs of each run side by side, highlighting differences.
