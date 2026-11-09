@@ -20,11 +20,11 @@ from pazufa_scraper_be.tracing.trace_pipeline import trace_pipeline
 from pazufa_scraper_be.tracing.vorgang_helper import feed_to_gesetz_vorgang_dicts, validate_vorgang
 
 
-async def main(settings:Settings, *,n_max_gesetz_vorgang:int = 5) -> None:
+async def main(settings: Settings, *, n_max_gesetz_vorgang: int = 5) -> None:
     """Run traced pipelines for up to the requested number of feed items."""
     settings.set("TWISTED_REACTOR_ENABLED", False, priority="cmdline")  # noqa: FBT003
 
-    feed = await find_feeds(settings,allow_download=True)
+    feed = await find_feeds(settings, allow_download=True)
 
     gesetz_vorgang_dicts = feed_to_gesetz_vorgang_dicts(feed)
 
@@ -42,12 +42,11 @@ async def main(settings:Settings, *,n_max_gesetz_vorgang:int = 5) -> None:
             position=1,
         ) as successes_bar,
     ):
-
         for gesetz_vorgang_dict in gesetz_vorgang_dicts:
             records_bar.update(1)
 
             item = validate_vorgang(gesetz_vorgang_dict)
-            if isinstance(item,dict):
+            if isinstance(item, dict):
                 continue
 
             await run_item(settings, item)
@@ -58,9 +57,7 @@ async def main(settings:Settings, *,n_max_gesetz_vorgang:int = 5) -> None:
                 break
 
 
-
 if __name__ == "__main__":
-
     n_max_gesetz_vorgang = 5
 
     settings = get_project_settings()
