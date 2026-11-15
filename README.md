@@ -120,20 +120,20 @@ tests
 To run unit tests use
 
 ```bash
-pytest
-pytest tests/unit
+uv run pytest
+uv run pytest tests/unit
 ```
 
 To get the test coverage run
 
 ```bash
-pytest --cov
+uv run pytest --cov
 ```
 
 or
 
 ```bash
-pytest --cov --cov-report=html
+uv run pytest --cov --cov-report=html
 ```
 
 to create a `htmlcov/` directory with the results. Run
@@ -146,21 +146,39 @@ for an interactive overview.
 
 #### Integration Tests
 
-The objective is to check that the `ITEM_PIPELINES`, given the same `xml` feed, produce the same output (at least when it comes to deterministic fields, not llm summaries or similar). We want to do this for several Vorgänge.
+The objective is to check that the deterministic parts of `ITEM_PIPELINES`, **given the same `xml` feed**, **produce the same output**, for several Vorgänge. Currently the comparison is limited to a comparison of the `PaZuFaVorgang` object.
 
-So essentially what we want to do is trace the pipeline executions. We use `mlflow` here for that.
+The current pipelines configuration is
 
-To do the tracing of the pipelines itself we wrap the `.process_item` methods, snapshot their inputs and outputs.
+```mermaid
+flowchart TD
+  GesetzVorgangSpider --dict | GesetzVorgang --> HandleErrors
+  HandleErrors --GesetzVorgang--> PrepareDocumentUrls
+  PrepareDocumentUrls --GesetzVorgang--> DownloadDocuments
+  DownloadDocuments --GesetzVorgang--> ExtractText
+  ExtractText --GesetzVorgang--> SummarizeText
+  SummarizeText --GesetzVorgang--> BuildPaZuFaVorgang
+  BuildPaZuFaVorgang --PaZuFaVorgang--> SubmitVorgang
+  SubmitVorgang
+```
 
-To create reference traces to later compare against run
+`HandleErrors` to `BuildPaZuFaVorgang` are the pipelines that do the data transformations we want to keep consistent.
+
+To do the integration tests we capture the input and output of each of those pipelines, from `dict | GesetzVorgang` to `PaZuFaVorgang` for a couple of Vorgänge (currently hardcoded to 5) once, for example on `main`, as references and then again during the actual integration test run. And then compare those objects.
+
+To do the persistence and retrieval we use `mlflow` here. To capture capturing snapshot the pipeline input and output objects the `.process_item` methods of the pipelines are wrapper with `mlflow` tracing helpers.
+
+The reference are created using
 
 ```bash
 uv run python scripts/create_integration_test_references.py
 ```
 
-before you do any changes to the pipelines. This writes the traces to `tests/integration-tests-mlflow.db`.
+This writes the snapshots to `tests/integration-tests-mlflow.db`.
 
-Those traces can be visually inspected in your browser when you start an mlflow server, e.g. using
+Currently `create_integration_test_references.py` hardcodes what pipelines to include. The script intentionally excludes `SubmitVorgang`, because that pipeline does not produce any output.
+
+The created snapshots can be visually inspected in your browser when you start an mlflow server, e.g. using
 
 ```bash
 mlflow server \
@@ -169,12 +187,26 @@ mlflow server \
   --port 5000
 ```
 
-Then after you've done your code changes to the pipelines you can re-run the same Vorgänge (make sure the feed file is unchanged) using
+`--backend-store-uri` needs to be an absolute path and point to `./tests/integration-tests-mlflow.db`.
+
+The integration test itself is executed using
 
 ```bash
 uv run pytest -m integration
 ```
 
-The `integration` marked test(s) does a limited sanity check of the pipeline outputs for you. If the test(s) fail you should be provided with `item_id` / Vorgang ID identifiers.
+This test failing indicates that some of the produced objects differ from their reference, potentially due to an unexpected side-effect of a change to the logic of one of the pipelines.
 
-To help you understand the differences between the reference run and the test run the notebook [`notebooks/test-and-reference-run-diff.ipynb`](./notebooks/test-and-reference-run-diff.ipynb) is provided for you. It let's you inspect the inputs and outputs of each run side by side, highlighting differences.
+The intended workflow is as follows for any intended pipelines changes:
+
+1. Make your changes on your feature branch.
+2. Run `uv run python scripts/create_integration_test_references.py` on the `main` branch.
+3. Run `uv run pytest -m integration` on your feature branch, comparing against the snapshots from the `main` branch, without your changes.
+
+To visually inspect disagreements between reference and test runs you can use the notebook [`notebooks/test-and-reference-run-diff.ipynb`](./notebooks/test-and-reference-run-diff.ipynb). It let's you inspect the inputs and outputs of each run side by side, highlighting differences.
+
+Note: The integration tests here are conceptual. Hence their implementation is quite limited in scope. An actually spelled out version of integration tests which could be relied on for pipeline development should
+- include more fields,
+- put tighter constraints on the fields (presence, type),
+- test more Vorgang instances than 5 and
+- potentially go beyond the comparison of the final `PaZuFaVorgang` objects.
