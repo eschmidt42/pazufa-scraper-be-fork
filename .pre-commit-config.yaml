@@ -28,19 +28,19 @@ repos:
   hooks:
   - id: ruff-check
     name: linting
-    entry: uv run ruff check pazufa_scraper_be/ tests/ notebooks/
+    entry: uv run --frozen --group code_hygiene ruff check --no-fix .
     pass_filenames: false
     language: system
     types_or: [python, pyi, jupyter]
   - id: ruff-format
     name: formatting
-    entry: uv run ruff format pazufa_scraper_be/ tests/ notebooks/
+    entry: uv run --frozen --group code_hygiene ruff format .
     pass_filenames: false
     language: system
     types_or: [python, pyi]
   - id: ty
     name: type check
-    entry: uv run ty check pazufa_scraper_be/ tests/ notebooks/
+    entry: uv run --frozen --group code_hygiene ty check pazufa_scraper_be/ tests/ notebooks/
     pass_filenames: false
     language: system
     types_or: [python, pyi, jupyter]
