@@ -100,9 +100,9 @@ def comparison_items(traces_reference: list[Trace], comparison_settings: Setting
     return _get_filtered_gesetz_vorgangs_for_the_run(item_ids_in_reference, comparison_settings)
 
 
-@pytest.mark.integration
-def test_run_comparisons(traces_reference: list[Trace], comparison_settings: Settings, comparison_items: list[GesetzVorgang]) -> None:
-    """Compare traced pipeline results with references for matching feed items."""
+@pytest.fixture
+def test_run_traces(comparison_settings: Settings, comparison_items: list[GesetzVorgang]) -> list[Trace]:
+    """Set up mlflow, update settings, run pipelines and retrieve traces."""
     db_path_test_run = (DB_DIR / TEST_RUN_DB_NAME).resolve()
     assert db_path_test_run is not None
 
@@ -129,18 +129,16 @@ def test_run_comparisons(traces_reference: list[Trace], comparison_settings: Set
         asyncio.run(run_item(comparison_settings, g))
 
     # collecting the new traces
-    traces_test_run = get_traces_from_mlflow_db(
-        span_name=SPAN_NAME, tracking_uri=tracking_uri_test_run, experiment=EXPERIMENT_TEST_RUN, last_minutes=LAST_MINUTES
-    )
+    return get_traces_from_mlflow_db(span_name=SPAN_NAME, tracking_uri=tracking_uri_test_run, experiment=EXPERIMENT_TEST_RUN, last_minutes=LAST_MINUTES)
 
-    for g in comparison_items:
-        comparison_item_id = g.id
 
-        item_id_reference, span_reference, outcome_reference = find_span(
-            traces_reference, comparison_item_id=comparison_item_id, comparison_span_name=SPAN_NAME
-        )
+@pytest.mark.integration
+def test_run_comparisons(traces_reference: list[Trace], comparison_items: list[GesetzVorgang], test_run_traces: list[Trace]) -> None:
+    """Compare traced pipeline results with references for matching feed items."""
+    for vorgang in comparison_items:
+        item_id_reference, span_reference, outcome_reference = find_span(traces_reference, comparison_item_id=vorgang.id, comparison_span_name=SPAN_NAME)
 
-        item_id_test_run, span_test_run, outcome_test_run = find_span(traces_test_run, comparison_item_id=comparison_item_id, comparison_span_name=SPAN_NAME)
+        item_id_test_run, span_test_run, outcome_test_run = find_span(test_run_traces, comparison_item_id=vorgang.id, comparison_span_name=SPAN_NAME)
 
         assert item_id_reference == item_id_test_run
         assert outcome_reference == outcome_test_run
