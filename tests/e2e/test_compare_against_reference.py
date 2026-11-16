@@ -28,8 +28,8 @@ from pazufa_scraper_be.tracing.spidering import run_item
 from pazufa_scraper_be.tracing.trace_pipeline import OutcomesEnum, get_traces_from_mlflow_db, trace_pipeline
 from pazufa_scraper_be.tracing.vorgang_helper import feed_to_gesetz_vorgang_dicts, validate_vorgang
 
-EXPERIMENT_REFERENCE = "integration reference"
-EXPERIMENT_TEST_RUN = "integration test run"
+EXPERIMENT_REFERENCE = "e2e reference"
+EXPERIMENT_TEST_RUN = "e2e test run"
 SPAN_NAME = "BuildPaZuFaVorgang"
 EXPECTED_FIELDS = [
     "api_id",
@@ -50,15 +50,15 @@ EXPECTED_FIELDS = [
 EXPECTED_NOT_NONE_FIELDS = ["api_id"]
 
 DB_DIR = Path(__file__).resolve().parent.parent
-REFERENCE_DB_NAME = "integration-reference-mlflow.db"
-TEST_RUN_DB_NAME = "integration-tests-mlflow.db"
+REFERENCE_DB_NAME = "e2e-reference-mlflow.db"
+TEST_RUN_DB_NAME = "e2e-tests-mlflow.db"
 
 LAST_MINUTES = 60
 
 
 @pytest.fixture
 def traces_reference() -> list[Trace]:
-    """Load reference traces from the integration-reference MLflow database."""
+    """Load reference traces from the e2e-reference MLflow database."""
     # collecting reference information
 
     reference_db_path = DB_DIR / REFERENCE_DB_NAME
@@ -132,7 +132,7 @@ def test_run_traces(comparison_settings: Settings, comparison_items: list[Gesetz
     return get_traces_from_mlflow_db(span_name=SPAN_NAME, tracking_uri=tracking_uri_test_run, experiment=EXPERIMENT_TEST_RUN, last_minutes=LAST_MINUTES)
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 def test_run_comparisons(traces_reference: list[Trace], comparison_items: list[GesetzVorgang], test_run_traces: list[Trace]) -> None:
     """Compare traced pipeline results with references for matching feed items."""
     for vorgang in comparison_items:

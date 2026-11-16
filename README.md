@@ -104,11 +104,11 @@ prek run test --all-files
 
 ### Testing
 
-Unit and integration tests are organized as
+Unit and end-to-end (e2e) tests are organized as
 
 ```text
 tests
-├── integration
+├── e2e
 └── unit
     └── pazufa_scraper_be
         ├── conftest.py & helpers.py
@@ -144,7 +144,7 @@ open htmlcov/index.html
 
 for an interactive overview.
 
-#### Integration Tests
+#### End-to-End Tests (e2e)
 
 The objective is to check that the deterministic parts of `ITEM_PIPELINES`, **given the same `xml` feed**, **produce the same output**, for several Vorgänge. Currently the comparison is limited to a comparison of the `PaZuFaVorgang` object.
 
@@ -164,35 +164,35 @@ flowchart TD
 
 `HandleErrors` to `BuildPaZuFaVorgang` are the pipelines that do the data transformations we want to keep consistent.
 
-To do the integration tests we capture the input and output of each of those pipelines, from `dict | GesetzVorgang` to `PaZuFaVorgang` for a couple of Vorgänge (currently hardcoded to 5) once, for example on `main`, as references and then again during the actual integration test run. And then compare those objects.
+To do the e2e tests we capture the input and output of each of those pipelines, from `dict | GesetzVorgang` to `PaZuFaVorgang` for a couple of Vorgänge (currently hardcoded to 5) once, for example on `main`, as references and then again during the actual e2e test run. And then compare those objects.
 
 To do the persistence and retrieval we use `mlflow` here. To capture capturing snapshot the pipeline input and output objects the `.process_item` methods of the pipelines are wrapper with `mlflow` tracing helpers.
 
 The reference are created using
 
 ```bash
-uv run python scripts/create_integration_test_references.py
+uv run python scripts/create_e2e_test_references.py
 ```
 
-This writes the snapshots to `tests/integration-tests-mlflow.db`.
+This writes the snapshots to `tests/e2e-tests-mlflow.db`.
 
-Currently `create_integration_test_references.py` hardcodes what pipelines to include. The script intentionally excludes `SubmitVorgang`, because that pipeline does not produce any output.
+Currently `create_e2e_test_references.py` hardcodes what pipelines to include. The script intentionally excludes `SubmitVorgang`, because that pipeline does not produce any output.
 
 The created snapshots can be visually inspected in your browser when you start an mlflow server, e.g. using
 
 ```bash
 mlflow server \
-  --backend-store-uri "sqlite:////absolute/path/above/to/tests/integration-tests-mlflow.db" \
+  --backend-store-uri "sqlite:////absolute/path/above/to/tests/e2e-tests-mlflow.db" \
   --host 127.0.0.1 \
   --port 5000
 ```
 
-`--backend-store-uri` needs to be an absolute path and point to `./tests/integration-tests-mlflow.db`.
+`--backend-store-uri` needs to be an absolute path and point to `./tests/e2e-tests-mlflow.db`.
 
-The integration test itself is executed using
+The ee test itself is executed using
 
 ```bash
-uv run pytest -m integration
+uv run pytest -m e2e
 ```
 
 This test failing indicates that some of the produced objects differ from their reference, potentially due to an unexpected side-effect of a change to the logic of one of the pipelines.
@@ -200,12 +200,12 @@ This test failing indicates that some of the produced objects differ from their 
 The intended workflow is as follows for any intended pipelines changes:
 
 1. Make your changes on your feature branch.
-2. Run `uv run python scripts/create_integration_test_references.py` on the `main` branch.
-3. Run `uv run pytest -m integration` on your feature branch, comparing against the snapshots from the `main` branch, without your changes.
+2. Run `uv run python scripts/create_e2e_test_references.py` on the `main` branch.
+3. Run `uv run pytest -m e2e` on your feature branch, comparing against the snapshots from the `main` branch, without your changes.
 
 To visually inspect disagreements between reference and test runs you can use the notebook [`notebooks/test-and-reference-run-diff.ipynb`](./notebooks/test-and-reference-run-diff.ipynb). It let's you inspect the inputs and outputs of each run side by side, highlighting differences.
 
-Note: The integration tests here are conceptual. Hence their implementation is quite limited in scope. An actually spelled out version of integration tests which could be relied on for pipeline development should
+Note: The e2e tests here are conceptual. Hence their implementation is quite limited in scope. An actually spelled out version of e2e tests which could be relied on for pipeline development should
 - include more fields,
 - put tighter constraints on the fields (presence, type),
 - test more Vorgang instances than 5 and

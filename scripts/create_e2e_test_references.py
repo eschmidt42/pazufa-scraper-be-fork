@@ -63,12 +63,12 @@ if __name__ == "__main__":
     settings = get_project_settings()
 
     root_path = Path(__file__).parent.parent
-    db_path = (root_path / "tests" / "integration-reference-mlflow.db").resolve()
+    db_path = (root_path / "tests" / "e2e-reference-mlflow.db").resolve()
     assert db_path is not None
 
     db_path.parent.mkdir(parents=False, exist_ok=True)
 
-    experiment = "integration reference"
+    experiment = "e2e reference"
     tracking_uri = f"sqlite:///{db_path}"
 
     mlflow.set_tracking_uri(tracking_uri)

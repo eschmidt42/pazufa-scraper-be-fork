@@ -44,11 +44,11 @@ show_missing = true
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-markers = ["integration: test that runs the scraper pipelines for multiple documents, comparing against pre-existing reference results. needs explicit `pytest -m integration` to run."]
+markers = ["e2e: test that runs the scraper pipelines for multiple documents, comparing against pre-existing reference results. needs explicit `pytest -m e2e` to run."]
 addopts = [
   "-re",
   "--strict-markers",
-  "-m", "not integration"
+  "-m", "not e2e"
 ]
 
 [tool.ruff]
