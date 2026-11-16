@@ -92,13 +92,17 @@ def _get_filtered_gesetz_vorgangs_for_the_run(item_ids_in_reference: set[str], s
     return filtered_gesetz_vorgangs_to_run
 
 
-@pytest.mark.integration
-def test_run_comparisons(traces_reference: list[Trace], comparison_settings: Settings) -> None:
-    """Compare traced pipeline results with references for matching feed items."""
+@pytest.fixture
+def comparison_items(traces_reference: list[Trace], comparison_settings: Settings) -> list[GesetzVorgang]:
+    """Collect items to do the comparison runs for."""
     item_ids_in_reference = {get_item_id_for_trace(_t) for _t in traces_reference}
 
-    filtered_gesetz_vorgangs_to_run = _get_filtered_gesetz_vorgangs_for_the_run(item_ids_in_reference, comparison_settings)
+    return _get_filtered_gesetz_vorgangs_for_the_run(item_ids_in_reference, comparison_settings)
 
+
+@pytest.mark.integration
+def test_run_comparisons(traces_reference: list[Trace], comparison_settings: Settings, comparison_items: list[GesetzVorgang]) -> None:
+    """Compare traced pipeline results with references for matching feed items."""
     db_path_test_run = (DB_DIR / TEST_RUN_DB_NAME).resolve()
     assert db_path_test_run is not None
 
@@ -121,7 +125,7 @@ def test_run_comparisons(traces_reference: list[Trace], comparison_settings: Set
     comparison_settings["ITEM_PIPELINES"] = item_pipelines
 
     # running the traced pipelines
-    for g in filtered_gesetz_vorgangs_to_run:
+    for g in comparison_items:
         asyncio.run(run_item(comparison_settings, g))
 
     # collecting the new traces
@@ -129,7 +133,7 @@ def test_run_comparisons(traces_reference: list[Trace], comparison_settings: Set
         span_name=SPAN_NAME, tracking_uri=tracking_uri_test_run, experiment=EXPERIMENT_TEST_RUN, last_minutes=LAST_MINUTES
     )
 
-    for g in filtered_gesetz_vorgangs_to_run:
+    for g in comparison_items:
         comparison_item_id = g.id
 
         item_id_reference, span_reference, outcome_reference = find_span(
