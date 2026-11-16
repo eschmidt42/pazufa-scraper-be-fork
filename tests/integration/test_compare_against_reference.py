@@ -72,6 +72,14 @@ def traces_reference() -> list[Trace]:
     )
 
 
+@pytest.fixture
+def comparison_settings() -> Settings:
+    """Settings scrapy settings for the comparison run."""
+    settings = get_project_settings()
+    settings.set("TWISTED_REACTOR_ENABLED", False, priority="cmdline")  # noqa: FBT003
+    return settings
+
+
 def _get_filtered_gesetz_vorgangs_for_the_run(item_ids_in_reference: set[str], settings: Settings) -> list[GesetzVorgang]:
 
     feed = asyncio.run(find_feeds(settings, allow_download=False))
@@ -85,15 +93,11 @@ def _get_filtered_gesetz_vorgangs_for_the_run(item_ids_in_reference: set[str], s
 
 
 @pytest.mark.integration
-def test_run_comparisons(traces_reference: list[Trace]) -> None:
+def test_run_comparisons(traces_reference: list[Trace], comparison_settings: Settings) -> None:
     """Compare traced pipeline results with references for matching feed items."""
     item_ids_in_reference = {get_item_id_for_trace(_t) for _t in traces_reference}
 
-    # configuration for traced pipelines re-runs
-    settings = get_project_settings()
-    settings.set("TWISTED_REACTOR_ENABLED", False, priority="cmdline")  # noqa: FBT003
-
-    filtered_gesetz_vorgangs_to_run = _get_filtered_gesetz_vorgangs_for_the_run(item_ids_in_reference, settings)
+    filtered_gesetz_vorgangs_to_run = _get_filtered_gesetz_vorgangs_for_the_run(item_ids_in_reference, comparison_settings)
 
     db_path_test_run = (DB_DIR / TEST_RUN_DB_NAME).resolve()
     assert db_path_test_run is not None
@@ -114,11 +118,11 @@ def test_run_comparisons(traces_reference: list[Trace]) -> None:
     for pipeline_cls in item_pipelines:
         trace_pipeline(pipeline_cls)
 
-    settings["ITEM_PIPELINES"] = item_pipelines
+    comparison_settings["ITEM_PIPELINES"] = item_pipelines
 
     # running the traced pipelines
     for g in filtered_gesetz_vorgangs_to_run:
-        asyncio.run(run_item(settings, g))
+        asyncio.run(run_item(comparison_settings, g))
 
     # collecting the new traces
     traces_test_run = get_traces_from_mlflow_db(
